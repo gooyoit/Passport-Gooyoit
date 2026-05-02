@@ -27,6 +27,7 @@ package-lock.json
 # build
 dist/
 *.tsbuildinfo
+.vite/
 
 # misc
 *.png
