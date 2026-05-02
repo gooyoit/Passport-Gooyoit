@@ -32,3 +32,4 @@ dist/
 # misc
 *.png
 .playwright-mcp/
+CLAUDE.md
