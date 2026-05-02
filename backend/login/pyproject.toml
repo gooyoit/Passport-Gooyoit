@@ -1,0 +1,40 @@
+[project]
+name = "passport-login"
+version = "0.1.0"
+description = "Gooyoit Passport login and authorization service."
+requires-python = ">=3.12"
+dependencies = [
+    "authlib>=1.3.0",
+    "captcha>=0.5.0",
+    "casbin>=1.36.0",
+    "email-validator>=2.2.0",
+    "fastapi>=0.115.0",
+    "pydantic-settings>=2.6.0",
+    "pyjwt>=2.9.0",
+    "pymysql>=1.1.0",
+    "redis>=5.0.0",
+    "resend>=2.0.0",
+    "sqlalchemy>=2.0.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"

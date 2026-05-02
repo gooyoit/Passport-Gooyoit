@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# environment
+.env
+.env.local
+.env.*.local
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+passport.db
+.pytest_cache/
+
+# Node
+node_modules/
+package-lock.json
+
+# build
+dist/
+*.tsbuildinfo
+
+# misc
+*.png
+.playwright-mcp/
