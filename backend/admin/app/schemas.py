@@ -86,7 +86,7 @@ class LoginMethodRead(BaseModel):
 class LoginMethodUpsert(BaseModel):
     """Enable or disable one login method."""
 
-    method: str = Field(pattern="^(email_code|wechat|google|github)$")
+    method: str = Field(pattern="^(email_code|email_password|wechat|google|github)$")
     enabled: bool = True
     config: dict | None = None
 

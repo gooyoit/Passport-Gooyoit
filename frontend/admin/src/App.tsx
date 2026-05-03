@@ -895,7 +895,7 @@ function LoginMethodsView({
     onLoad();
   }
 
-  const allMethods = ["email_code", "wechat", "google", "github"];
+  const allMethods = ["email_code", "email_password", "wechat", "google", "github"];
   const existingKeys = new Set(methods.map((m) => m.method));
   const missing = allMethods.filter((m) => !existingKeys.has(m));
 
