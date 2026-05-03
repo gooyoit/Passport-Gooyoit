@@ -167,7 +167,6 @@ def list_secrets(
         masked = h[:8] + "•" * 16 + h[-4:] if len(h) > 12 else "•" * len(h)
         result.append({"id": row.id, "masked_hash": masked, "created_at": row.created_at})
     return result
-    )
 
 
 @router.delete("/applications/{application_id}/secrets/{secret_id}")
