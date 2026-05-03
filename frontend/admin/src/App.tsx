@@ -5,6 +5,7 @@ import {
   CheckCircle,
   ChevronRight,
   Globe,
+  Info,
   Key,
   LayoutDashboard,
   Link2,
@@ -604,11 +605,14 @@ function LoginMethodsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">管理该应用支持的登录方式，已启用的方式将在登录页展示。</p>
+      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
+        <p className="text-sm text-muted">
+          <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
+          管理该应用支持的登录方式，已启用的方式将在登录页展示。
+        </p>
         {missing.length > 0 && (
           <select
-            className={cn(inputCls, "w-auto text-sm")}
+            className="rounded-lg border border-brand/30 bg-white px-3 py-1.5 text-sm text-brand outline-none hover:border-brand focus:ring-2 focus:ring-brand/20"
             defaultValue=""
             onChange={(e) => {
               if (e.target.value) addMethod(e.target.value);
@@ -1339,14 +1343,16 @@ export default function App() {
               />
             ))}
             {selectedApp && (
-              <div className="ml-3 mt-3 border-l border-gray-700 pl-3">
+              <div className="mx-2 mt-1">
                 <button
                   onClick={() => openAppDetail(selectedApp)}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-sidebar-hover hover:text-white"
+                  className="flex w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-sidebar-hover hover:text-white"
                 >
-                  <Globe size={16} />
-                  {selectedApp.name}
-                  <ChevronRight size={14} />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand/20">
+                    <Globe size={13} className="text-brand" />
+                  </div>
+                  <span className="truncate">{selectedApp.name}</span>
+                  <ChevronRight size={14} className="ml-auto shrink-0 text-gray-500" />
                 </button>
               </div>
             )}
