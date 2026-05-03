@@ -146,6 +146,9 @@ class ApplicationUserRead(BaseModel):
     id: int
     application_id: int
     user_id: int
+    user_email: str
+    user_display_name: str | None
+    user_status: str
     status: str
     roles: list[str]
     permissions: list[str]

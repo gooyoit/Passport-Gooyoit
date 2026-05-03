@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user_id
-from app.models import ApplicationUser, Role, UserRole
+from app.models import ApplicationUser, Role, User, UserRole
 from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate
 from app.services.permissions import get_effective_permissions, get_effective_roles
 
@@ -29,11 +29,19 @@ def list_application_users(
         .where(ApplicationUser.application_id == application_id)
         .order_by(ApplicationUser.id)
     ).all()
+    user_ids = [m.user_id for m in memberships]
+    users_by_id = {
+        u.id: u
+        for u in db.scalars(select(User).where(User.id.in_(user_ids))).all()
+    }
     return [
         ApplicationUserRead(
             id=membership.id,
             application_id=membership.application_id,
             user_id=membership.user_id,
+            user_email=users_by_id[membership.user_id].email,
+            user_display_name=users_by_id[membership.user_id].display_name,
+            user_status=users_by_id[membership.user_id].status,
             status=membership.status,
             roles=[
                 role.code
@@ -73,10 +81,14 @@ def update_application_user_status(
         )
     membership.status = payload.status
     db.commit()
+    user = db.get(User, user_id)
     return ApplicationUserRead(
         id=membership.id,
         application_id=membership.application_id,
         user_id=membership.user_id,
+        user_email=user.email if user else "",
+        user_display_name=user.display_name if user else None,
+        user_status=user.status if user else "",
         status=membership.status,
         roles=[role.code for role in get_effective_roles(db, application_id, user_id)],
         permissions=get_effective_permissions(db, application_id, user_id),
