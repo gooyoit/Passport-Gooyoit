@@ -2,6 +2,8 @@
 
 from datetime import timedelta
 
+import structlog
+
 from fastapi import HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -33,6 +35,8 @@ from app.services.applications import (
 from app.services.permissions import get_effective_permissions, get_effective_roles
 from app.services.sso import create_sso_session, revoke_sso_session
 
+logger = structlog.get_logger(__name__)
+
 SSO_COOKIE_NAME = "passport_sso"
 
 
@@ -56,7 +60,8 @@ def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = 
     )
     db.add(verification)
     db.commit()
-    send_verification_code(email, code)
+    sent = send_verification_code(email, code)
+    logger.info("email_code_issued", email=email, purpose=purpose, sent=sent)
     return code
 
 
@@ -98,6 +103,7 @@ def complete_email_login(
     verification.used_at = now
 
     user = get_or_create_email_user(db, email=email)
+    logger.info("email_login_success", email=email, user_id=user.id)
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 
@@ -175,6 +181,7 @@ def complete_email_register(
     )
     db.add(user)
     db.flush()
+    logger.info("user_registered", email=normalized_email)
 
     db.add(
         UserIdentity(

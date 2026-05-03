@@ -6,10 +6,12 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import auth, health, oauth
 from app.core.config import settings
+from app.core.logging import setup_logging
 
 
 def create_app() -> FastAPI:
     """Create the FastAPI application."""
+    setup_logging(debug=settings.debug)
     app = FastAPI(title=settings.app_name, debug=settings.debug)
     app.add_middleware(
         CORSMiddleware,
