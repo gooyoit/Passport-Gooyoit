@@ -5,6 +5,7 @@ from __future__ import annotations
 import structlog
 
 import resend
+from resend.exceptions import ResendError, ValidationError
 
 from app.core.config import settings
 
@@ -31,6 +32,6 @@ def send_verification_code(to: str, code: str) -> bool:
         })
         logger.info("verification_code_sent", to=to)
         return True
-    except Exception:
+    except (ValidationError, ResendError, ConnectionError, TimeoutError) as e:
         logger.exception("verification_code_send_failed", to=to)
         return False

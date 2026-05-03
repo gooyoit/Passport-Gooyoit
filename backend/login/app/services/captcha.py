@@ -4,6 +4,7 @@ import base64
 import io
 import secrets
 import string
+import threading
 import time
 import uuid
 
@@ -17,6 +18,7 @@ CAPTCHA_CHARS = string.digits + "ABCDEFGHJKLMNPQRSTUVWXYZ"
 MAX_MEMORY_CAPTCHA = 1000
 
 _captcha_store: dict[str, tuple[str, float]] = {}
+_captcha_lock = threading.Lock()
 
 
 def generate_captcha(redis_client: Redis | None) -> dict:
@@ -32,11 +34,12 @@ def generate_captcha(redis_client: Redis | None) -> dict:
         redis_client.setex(f"captcha:{key}", settings.captcha_ttl_seconds, text.lower())
     else:
         now = time.time()
-        _captcha_store[key] = (text.lower(), now + settings.captcha_ttl_seconds)
-        if len(_captcha_store) > MAX_MEMORY_CAPTCHA:
-            sorted_keys = sorted(_captcha_store, key=lambda k: _captcha_store[k][1])
-            for k in sorted_keys[: len(_captcha_store) - MAX_MEMORY_CAPTCHA]:
-                del _captcha_store[k]
+        with _captcha_lock:
+            _captcha_store[key] = (text.lower(), now + settings.captcha_ttl_seconds)
+            if len(_captcha_store) > MAX_MEMORY_CAPTCHA:
+                sorted_keys = sorted(_captcha_store, key=lambda k: _captcha_store[k][1])
+                for k in sorted_keys[: len(_captcha_store) - MAX_MEMORY_CAPTCHA]:
+                    del _captcha_store[k]
 
     result: dict = {"captcha_key": key, "captcha_image": f"data:image/png;base64,{b64}"}
     if settings.debug:
@@ -50,7 +53,8 @@ def verify_captcha(redis_client: Redis | None, key: str, answer: str) -> bool:
         redis_client.delete(f"captcha:{key}")
         return stored is not None and stored == answer.strip().lower()
 
-    entry = _captcha_store.pop(key, None)
+    with _captcha_lock:
+        entry = _captcha_store.pop(key, None)
     if entry is None:
         return False
     text, expires_at = entry

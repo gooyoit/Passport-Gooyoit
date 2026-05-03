@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, Copy, Download, Shield, X } from "lucide-react";
-export { cn } from "../lib/utils";
-import { cn as _cn, statusColor, statusLabel } from "../lib/utils";
-const cn = _cn;
+import { cn, statusColor, statusLabel } from "../lib/utils";
+export { cn };
 
 export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (

@@ -25,13 +25,44 @@ from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_login_lockout,
+    check_registration_rate_limit,
     check_request_code_rate_limit,
     clear_failed_login,
     get_client_ip,
     record_failed_login,
 )
+from redis import Redis
 
 router = APIRouter()
+
+
+def _check_rate_limit(request: Request, check_fn, *, log_label: str, email: str | None = None) -> Redis:
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    try:
+        check_fn(redis_client, email, client_ip)
+    except RateLimitExceeded as e:
+        logger.warning("rate_limited", label=log_label, email=email, client_ip=client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
+    return redis_client
+
+
+def _check_registration_ip_rate_limit(request: Request) -> None:
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    try:
+        check_registration_rate_limit(redis_client, client_ip)
+    except RateLimitExceeded as e:
+        logger.warning("rate_limited", label="register_ip", client_ip=client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
 
 
 @router.get("/captcha", response_model=CaptchaResponse)
@@ -49,21 +80,12 @@ def request_email_code(
     db: Session = Depends(get_db),
 ) -> EmailCodeResponse:
     """Request an email login code."""
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-
-    try:
-        check_request_code_rate_limit(redis_client, str(payload.email), client_ip)
-    except RateLimitExceeded as e:
-        logger.warning("request_code_rate_limited", email=payload.email, client_ip=client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
+    redis_client = _check_rate_limit(
+        request, check_request_code_rate_limit, log_label="request_code", email=str(payload.email)
+    )
 
     if not verify_captcha(redis_client, payload.captcha_key, payload.captcha_answer):
-        logger.warning("captcha_verification_failed", email=payload.email, client_ip=client_ip)
+        logger.warning("captcha_verification_failed", email=payload.email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired captcha",
@@ -81,18 +103,9 @@ def email_login(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Complete email login and return an authorization code."""
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-
-    try:
-        check_login_lockout(redis_client, str(payload.email), client_ip)
-    except RateLimitExceeded as e:
-        logger.warning("login_rate_limited", email=payload.email, client_ip=client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
+    redis_client = _check_rate_limit(
+        request, check_login_lockout, log_label="email_login", email=str(payload.email)
+    )
 
     try:
         auth_code = complete_email_login(
@@ -106,12 +119,12 @@ def email_login(
         )
     except HTTPException as exc:
         if exc.status_code == 400 and redis_client:
-            record_failed_login(redis_client, str(payload.email), client_ip)
+            record_failed_login(redis_client, str(payload.email), get_client_ip(request))
         logger.warning("email_login_failed", email=payload.email, detail=exc.detail)
         raise
 
     if redis_client:
-        clear_failed_login(redis_client, str(payload.email), client_ip)
+        clear_failed_login(redis_client, str(payload.email), get_client_ip(request))
 
     return EmailLoginResponse(
         code=auth_code.code,
@@ -128,18 +141,9 @@ def email_password_login(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Complete email + password login and return an authorization code."""
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-
-    try:
-        check_login_lockout(redis_client, str(payload.email), client_ip)
-    except RateLimitExceeded as e:
-        logger.warning("password_login_rate_limited", email=payload.email, client_ip=client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
+    redis_client = _check_rate_limit(
+        request, check_login_lockout, log_label="password_login", email=str(payload.email)
+    )
 
     try:
         auth_code = complete_password_login(
@@ -153,12 +157,12 @@ def email_password_login(
         )
     except HTTPException as exc:
         if exc.status_code in (400, 401) and redis_client:
-            record_failed_login(redis_client, str(payload.email), client_ip)
+            record_failed_login(redis_client, str(payload.email), get_client_ip(request))
         logger.warning("password_login_failed", email=payload.email, detail=exc.detail)
         raise
 
     if redis_client:
-        clear_failed_login(redis_client, str(payload.email), client_ip)
+        clear_failed_login(redis_client, str(payload.email), get_client_ip(request))
 
     logger.info("password_login_success", email=payload.email)
     return EmailLoginResponse(
@@ -176,18 +180,10 @@ def email_register(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Register a new user and return an authorization code."""
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-
-    try:
-        check_request_code_rate_limit(redis_client, str(payload.email), client_ip)
-    except RateLimitExceeded as e:
-        logger.warning("register_rate_limited", email=payload.email, client_ip=client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
+    _check_rate_limit(
+        request, check_request_code_rate_limit, log_label="register", email=str(payload.email)
+    )
+    _check_registration_ip_rate_limit(request)
 
     try:
         auth_code = complete_email_register(

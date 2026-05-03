@@ -125,3 +125,49 @@ def get_effective_permissions_for_users(
             granted.update(perms_by_role.get(rid, set()))
         result[uid] = sorted(granted)
     return result
+
+
+def get_effective_roles_for_users(
+    db: Session, application_id: int, user_ids: list[int],
+) -> dict[int, list[str]]:
+    """Return role codes for multiple users in an application."""
+    if not user_ids:
+        return {}
+    application = db.get(Application, application_id)
+    if application is None or application.status != "active":
+        return {uid: [] for uid in user_ids}
+    user_ids_set = set(user_ids)
+    memberships = db.scalars(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application_id,
+            ApplicationUser.user_id.in_(user_ids_set),
+            ApplicationUser.status == "active",
+        )
+    ).all()
+    active_user_ids = {m.user_id for m in memberships}
+    role_ids_by_user: dict[int, set[int]] = {uid: set() for uid in user_ids}
+    if application.default_role_id is not None:
+        for uid in active_user_ids:
+            role_ids_by_user[uid].add(application.default_role_id)
+    explicit = db.execute(
+        select(UserRole.user_id, UserRole.role_id).where(
+            UserRole.application_id == application_id,
+            UserRole.user_id.in_(active_user_ids),
+        )
+    ).all()
+    for uid, rid in explicit:
+        role_ids_by_user[uid].add(rid)
+    all_role_ids = set()
+    for rids in role_ids_by_user.values():
+        all_role_ids.update(rids)
+    if not all_role_ids:
+        return {uid: [] for uid in user_ids}
+    roles = db.scalars(
+        select(Role).where(Role.id.in_(all_role_ids))
+    ).all()
+    role_code_by_id: dict[int, str] = {r.id: r.code for r in roles}
+    result: dict[int, list[str]] = {}
+    for uid in user_ids:
+        codes = sorted({role_code_by_id[rid] for rid in role_ids_by_user[uid] if rid in role_code_by_id})
+        result[uid] = codes
+    return result

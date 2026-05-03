@@ -23,6 +23,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
         "http://localhost:5174",
     ]
+    default_access_token_ttl: int = 7200
+    default_refresh_token_ttl: int = 2_592_000
 
 
 @lru_cache

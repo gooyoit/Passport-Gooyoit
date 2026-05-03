@@ -45,7 +45,7 @@ class User(TimestampMixin, Base):
     display_name: Mapped[str | None] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(String(1024))
     hashed_password: Mapped[str | None] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    status: Mapped[UserStatus] = mapped_column(String(32), default=UserStatus.ACTIVE, nullable=False)
 
     identities: Mapped[list["UserIdentity"]] = relationship(back_populates="user")
 
@@ -57,7 +57,7 @@ class UserIdentity(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("provider", "provider_user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_email: Mapped[str | None] = mapped_column(String(255))
@@ -160,8 +160,8 @@ class RolePermission(Base):
     __table_args__ = (UniqueConstraint("role_id", "permission_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
-    permission_id: Mapped[int] = mapped_column(ForeignKey("permissions.id"), nullable=False)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False, index=True)
+    permission_id: Mapped[int] = mapped_column(ForeignKey("permissions.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -243,7 +243,7 @@ class EmailVerificationCode(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    purpose: Mapped[str] = mapped_column(String(64), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

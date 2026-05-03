@@ -1,6 +1,23 @@
 """Pydantic schemas for API requests and responses."""
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl
+import re
+
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
+
+
+def _password_complexity(password: str) -> str:
+    categories = 0
+    if re.search(r"[A-Z]", password):
+        categories += 1
+    if re.search(r"[a-z]", password):
+        categories += 1
+    if re.search(r"\d", password):
+        categories += 1
+    if re.search(r"[^A-Za-z0-9]", password):
+        categories += 1
+    if categories < 3:
+        raise ValueError("Password must contain at least 3 of: uppercase, lowercase, digit, special character")
+    return password
 
 
 class EmailCodeRequest(BaseModel):
@@ -49,6 +66,11 @@ class EmailRegisterRequest(BaseModel):
     email: EmailStr
     code: str = Field(min_length=4, max_length=12)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _password_complexity(v)
 
 
 class EmailPasswordLoginRequest(BaseModel):
@@ -128,3 +150,9 @@ class OAuthProviderRead(BaseModel):
     provider: str
     enabled: bool
     authorization_url: str | None = None
+
+
+class LoginMethodsResponse(BaseModel):
+    """Enabled login methods for an application."""
+
+    login_methods: list[str]

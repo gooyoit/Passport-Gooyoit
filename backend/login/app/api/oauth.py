@@ -13,6 +13,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import ApplicationLoginMethod, User, UserStatus
 from app.schemas import (
+    LoginMethodsResponse,
     LogoutRequest,
     OAuthProviderRead,
     RefreshTokenRequest,
@@ -38,18 +39,18 @@ from app.services.oauth_providers import (
     get_enabled_provider_method,
 )
 from app.services.permissions import get_effective_permissions, get_effective_roles
-from app.services.sso import create_sso_session, resolve_sso_user_id
+from app.services.sso import create_sso_session, resolve_sso_user_id, revoke_sso_session
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/login-methods")
+@router.get("/login-methods", response_model=LoginMethodsResponse)
 def login_methods(
     client_id: str,
     db: Session = Depends(get_db),
-):
+) -> LoginMethodsResponse:
     """Return enabled login methods for an application (JSON only, never redirects)."""
     application = get_active_application_by_client_id(db, client_id)
     if application is None:
@@ -60,7 +61,7 @@ def login_methods(
             ApplicationLoginMethod.enabled.is_(True),
         )
     ).all()
-    return {"login_methods": [m.method for m in methods]}
+    return LoginMethodsResponse(login_methods=[m.method for m in methods])
 
 
 @router.get("/authorize")

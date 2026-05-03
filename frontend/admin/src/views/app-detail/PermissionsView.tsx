@@ -24,23 +24,27 @@ export default function PermissionsView({
   const [selRole, setSelRole] = useState("");
   const [selPerm, setSelPerm] = useState("");
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [p, r] = await Promise.all([
-        request<Permission[]>(`/applications/${appId}/permissions`, token),
-        request<Role[]>(`/applications/${appId}/roles`, token),
-      ]);
-      setPerms(p);
-      setRoles(r);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-  }, [appId]);
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      request<Permission[]>(`/applications/${appId}/permissions`, token),
+      request<Role[]>(`/applications/${appId}/roles`, token),
+    ])
+      .then(([p, r]) => {
+        if (!cancelled) {
+          setPerms(p);
+          setRoles(r);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load permissions:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [appId, token]);
 
   async function create() {
     if (!code.trim() || !name.trim()) return;
@@ -56,7 +60,6 @@ export default function PermissionsView({
     setName("");
     setDesc("");
     setOpen(false);
-    await load();
     onLoad();
   }
 
@@ -70,7 +73,7 @@ export default function PermissionsView({
     setSelRole("");
     setSelPerm("");
     setAssignOpen(false);
-    await load();
+    onLoad();
   }
 
   if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;

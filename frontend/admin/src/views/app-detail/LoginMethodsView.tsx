@@ -24,39 +24,44 @@ export default function LoginMethodsView({
   const [methods, setMethods] = useState<LoginMethod[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
+    request<LoginMethod[]>(
+      `/applications/${appId}/login-methods`,
+      token,
+    ).then((data) => {
+      if (!cancelled) setMethods(data);
+    }).catch((err) => {
+      console.error("Failed to load login methods:", err);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [appId, token]);
+
+  async function toggle(method: LoginMethod) {
     try {
-      const data = await request<LoginMethod[]>(
-        `/applications/${appId}/login-methods`,
-        token,
-      );
-      setMethods(data);
-    } finally {
-      setLoading(false);
+      await request(`/applications/${appId}/login-methods`, token, {
+        method: "POST",
+        body: JSON.stringify({ method: method.method, enabled: !method.enabled }),
+      });
+      onLoad();
+    } catch (e) {
+      window.alert((e as Error).message);
     }
   }
 
-  useEffect(() => {
-    load();
-  }, [appId]);
-
-  async function toggle(method: LoginMethod) {
-    await request(`/applications/${appId}/login-methods`, token, {
-      method: "POST",
-      body: JSON.stringify({ method: method.method, enabled: !method.enabled }),
-    });
-    await load();
-    onLoad();
-  }
-
   async function addMethod(method: string) {
-    await request(`/applications/${appId}/login-methods`, token, {
-      method: "POST",
-      body: JSON.stringify({ method, enabled: true }),
-    });
-    await load();
-    onLoad();
+    try {
+      await request(`/applications/${appId}/login-methods`, token, {
+        method: "POST",
+        body: JSON.stringify({ method, enabled: true }),
+      });
+      onLoad();
+    } catch (e) {
+      window.alert((e as Error).message);
+    }
   }
 
   const allMethods = ["email_code", "email_password", "wechat", "google", "github"];

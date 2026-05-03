@@ -1,8 +1,16 @@
 """Pydantic schemas for API requests and responses."""
 
 from datetime import datetime
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +96,7 @@ class LoginMethodUpsert(BaseModel):
 
     method: str = Field(pattern="^(email_code|email_password|wechat|google|github)$")
     enabled: bool = True
-    config: dict | None = None
+    config: dict[str, str | bool | int | None] | None = None
 
 
 # ---------------------------------------------------------------------------

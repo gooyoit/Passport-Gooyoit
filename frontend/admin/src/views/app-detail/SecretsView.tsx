@@ -20,22 +20,21 @@ export default function SecretsView({
   const [secrets, setSecrets] = useState<ClientSecretItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const data = await request<ClientSecretItem[]>(
-        `/applications/${appId}/secrets`,
-        token,
-      );
-      setSecrets(data);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-  }, [appId, version]);
+    let cancelled = false;
+    setLoading(true);
+    request<ClientSecretItem[]>(
+      `/applications/${appId}/secrets`,
+      token,
+    ).then((data) => {
+      if (!cancelled) setSecrets(data);
+    }).catch((err) => {
+      console.error("Failed to load secrets:", err);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [appId, token, version]);
 
   if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;
 

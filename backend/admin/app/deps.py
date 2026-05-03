@@ -1,27 +1,48 @@
 """FastAPI dependencies for authentication and authorization."""
 
+import hashlib
+import threading
+import time
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import httpx
 
 from app.config import settings
+from app.services.passport import get_http_client
 
 _bearer_scheme = HTTPBearer()
 
 SUPER_ADMIN_ROLE = "super_admin"
 ADMIN_ROLE = "admin"
 
+_cache: dict[str, tuple[float, dict]] = {}
+_cache_lock = threading.Lock()
+_CACHE_TTL = 60
+
 
 async def _verify_token(credentials: HTTPAuthorizationCredentials) -> dict:
     """Validate the Bearer token via Passport /oauth/userinfo and return full response."""
+    token_key = hashlib.sha256(credentials.credentials.encode()).hexdigest()
+
+    with _cache_lock:
+        cached = _cache.get(token_key)
+    if cached is not None:
+        ts, data = cached
+        if time.monotonic() - ts < _CACHE_TTL:
+            return data
+        with _cache_lock:
+            _cache.pop(token_key, None)
+
+    import httpx
+
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{settings.passport_api_url}/oauth/userinfo",
-                headers={"Authorization": f"Bearer {credentials.credentials}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.get(
+            f"{settings.passport_api_url}/oauth/userinfo",
+            headers={"Authorization": f"Bearer {credentials.credentials}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
     except httpx.HTTPStatusError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -30,13 +51,17 @@ async def _verify_token(credentials: HTTPAuthorizationCredentials) -> dict:
     except httpx.RequestError:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Passport service unavailable",
+            detail="Service temporarily unavailable",
         )
     if not data.get("user") or "id" not in data.get("user", {}):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid userinfo response from Passport",
+            detail="Authentication service error",
         )
+
+    with _cache_lock:
+        _cache[token_key] = (time.monotonic(), data)
+
     return data
 
 

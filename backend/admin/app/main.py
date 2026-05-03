@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,6 +11,13 @@ from app.api.auth import router as auth_router
 from app.api.config import router as config_router
 from app.api.users import router as users_router
 from app.config import settings
+from app.services.passport import close_http_client
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await close_http_client()
 
 
 def create_app() -> FastAPI:
@@ -17,6 +26,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         docs_url="/docs" if settings.debug else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     app.add_middleware(

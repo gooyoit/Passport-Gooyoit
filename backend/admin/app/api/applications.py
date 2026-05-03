@@ -2,8 +2,8 @@
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.schemas import (
     ClientSecretResponse,
     LoginMethodRead,
     LoginMethodUpsert,
+    PaginatedResponse,
     PermissionCreate,
     PermissionRead,
     RoleCreate,
@@ -40,10 +41,23 @@ router = APIRouter(tags=["applications"], dependencies=[Depends(require_admin)])
 # Applications
 # ---------------------------------------------------------------------------
 
-@router.get("/applications", response_model=list[ApplicationRead])
-def list_applications(db: Session = Depends(get_db)) -> list[Application]:
+@router.get("/applications", response_model=PaginatedResponse[ApplicationRead])
+def list_applications(
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[ApplicationRead]:
     """List Passport applications."""
-    return list(db.scalars(select(Application).order_by(Application.id)).all())
+    total = db.scalar(select(func.count()).select_from(Application)) or 0
+    items = list(
+        db.scalars(
+            select(Application)
+            .order_by(Application.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    return {"items": items, "total": total}
 
 
 @router.post(
@@ -156,25 +170,38 @@ def regenerate_secret(
 
 @router.get(
     "/applications/{application_id}/secrets",
-    response_model=list[ClientSecretItem],
+    response_model=PaginatedResponse[ClientSecretItem],
 )
 def list_secrets(
     application_id: int,
     db: Session = Depends(get_db),
-) -> list[ApplicationClientSecret]:
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[ClientSecretItem]:
     """List client secrets for an application (no plaintext)."""
     application = db.get(Application, application_id)
     if application is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
         )
-    return list(
+    total = (
+        db.scalar(
+            select(func.count())
+            .select_from(ApplicationClientSecret)
+            .where(ApplicationClientSecret.application_id == application_id)
+        )
+        or 0
+    )
+    items = list(
         db.scalars(
             select(ApplicationClientSecret)
             .where(ApplicationClientSecret.application_id == application_id)
             .order_by(ApplicationClientSecret.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         ).all()
     )
+    return {"items": items, "total": total}
 
 
 @router.delete(

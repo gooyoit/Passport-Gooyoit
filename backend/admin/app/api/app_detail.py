@@ -1,16 +1,18 @@
 """Application-detail endpoints: users, role assignments, user status within app."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_admin, require_super_admin
 from app.models import ApplicationUser, Role, User, UserRole
-from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate
+from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate, PaginatedResponse
 from app.services.permissions import (
     get_effective_permissions,
     get_effective_permissions_for_users,
+    get_effective_roles_for_users,
     get_effective_roles,
 )
 
@@ -21,17 +23,25 @@ router = APIRouter(
 
 @router.get(
     "/applications/{application_id}/users",
-    response_model=list[ApplicationUserRead],
+    response_model=PaginatedResponse[ApplicationUserRead],
 )
 def list_application_users(
     application_id: int,
     db: Session = Depends(get_db),
-) -> list[ApplicationUserRead]:
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[ApplicationUserRead]:
     """List users that have joined an application."""
-    memberships = db.scalars(
+    base_query = (
         select(ApplicationUser)
         .where(ApplicationUser.application_id == application_id)
+    )
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    memberships = db.scalars(
+        base_query
         .order_by(ApplicationUser.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
     user_ids = [m.user_id for m in memberships]
     users_by_id = {
@@ -39,8 +49,8 @@ def list_application_users(
         for u in db.scalars(select(User).where(User.id.in_(user_ids))).all()
     }
     perms_map = get_effective_permissions_for_users(db, application_id, user_ids)
-    roles_map = {uid: [role.code for role in get_effective_roles(db, application_id, uid)] for uid in user_ids}
-    return [
+    roles_map = get_effective_roles_for_users(db, application_id, user_ids)
+    items = [
         ApplicationUserRead(
             id=membership.id,
             application_id=membership.application_id,
@@ -54,6 +64,7 @@ def list_application_users(
         )
         for membership in memberships
     ]
+    return {"items": items, "total": total}
 
 
 @router.patch(
@@ -79,7 +90,11 @@ def update_application_user_status(
             detail="Application user not found",
         )
     membership.status = payload.status
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     user = db.get(User, user_id)
     return ApplicationUserRead(
         id=membership.id,
@@ -130,5 +145,9 @@ def assign_role_to_user(
         db.add(
             UserRole(application_id=application_id, user_id=user_id, role_id=role_id)
         )
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     return {"status": "ok"}

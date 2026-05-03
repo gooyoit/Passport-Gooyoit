@@ -36,12 +36,27 @@ from app.services.applications import (
     is_login_method_enabled,
     validate_redirect_uri,
 )
-from app.services.permissions import get_effective_permissions, get_effective_roles
+from app.services.permissions import get_user_roles_and_permissions
 from app.services.sso import create_sso_session
 
 logger = structlog.get_logger(__name__)
 
 SSO_COOKIE_NAME = "passport_sso"
+
+
+def _set_sso_cookie_if_enabled(
+    db: Session, response: Response, application: Application, user_id: int
+) -> None:
+    if application.enable_sso:
+        sso_token = create_sso_session(db, user_id=user_id)
+        response.set_cookie(
+            SSO_COOKIE_NAME,
+            sso_token,
+            max_age=settings.sso_session_ttl_seconds,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite="lax",
+        )
 
 
 def verify_client_secret(db: Session, application: Application, client_secret: str) -> bool:
@@ -127,16 +142,7 @@ def complete_email_login(
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 
-    if application.enable_sso:
-        sso_token = create_sso_session(db, user_id=user.id)
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+    _set_sso_cookie_if_enabled(db, response, application, user.id)
 
     auth_code = create_authorization_code(
         db,
@@ -183,16 +189,7 @@ def complete_password_login(
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 
-    if application.enable_sso:
-        sso_token = create_sso_session(db, user_id=user.id)
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+    _set_sso_cookie_if_enabled(db, response, application, user.id)
 
     auth_code = create_authorization_code(
         db,
@@ -283,16 +280,7 @@ def complete_email_register(
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 
-    if application.enable_sso:
-        sso_token = create_sso_session(db, user_id=user.id)
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+    _set_sso_cookie_if_enabled(db, response, application, user.id)
 
     auth_code = create_authorization_code(
         db,
@@ -385,7 +373,7 @@ def get_or_create_oauth_user(
             email=normalized_email,
             display_name=display_name or normalized_email.split("@")[0],
             avatar_url=avatar_url,
-            status="active",
+            status=UserStatus.ACTIVE,
         )
         db.add(user)
         db.flush()
@@ -433,7 +421,7 @@ def ensure_application_user(
     membership = ApplicationUser(
         application_id=application.id,
         user_id=user.id,
-        status="active",
+        status=UserStatus.ACTIVE,
         joined_at=utcnow(),
     )
     db.add(membership)
@@ -508,15 +496,15 @@ def issue_access_token_for_user(
     user: User,
 ) -> tuple[str, list[str], list[str]]:
     """Issue an access token and return effective roles and permissions."""
-    roles = [role.code for role in get_effective_roles(db, application.id, user.id)]
-    permissions = get_effective_permissions(db, application.id, user.id)
+    roles, permissions = get_user_roles_and_permissions(db, application.id, user.id)
+    role_codes = [role.code for role in roles]
     access_token = create_access_token(
         subject=str(user.id),
         application_id=application.id,
         expires_in=application.access_token_ttl_seconds,
-        extra_claims={"roles": roles},
+        extra_claims={"roles": role_codes},
     )
-    return access_token, roles, permissions
+    return access_token, role_codes, permissions
 
 
 def refresh_access_token(

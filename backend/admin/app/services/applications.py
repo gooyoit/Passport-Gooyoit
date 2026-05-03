@@ -44,8 +44,8 @@ def create_application(
         redirect_uris=redirect_uris,
         enable_public_users=enable_public_users,
         enable_sso=enable_sso,
-        access_token_ttl_seconds=7200,
-        refresh_token_ttl_seconds=2_592_000,
+        access_token_ttl_seconds=settings.default_access_token_ttl,
+        refresh_token_ttl_seconds=settings.default_refresh_token_ttl,
         status="active",
     )
     db.add(application)

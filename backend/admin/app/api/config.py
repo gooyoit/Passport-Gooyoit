@@ -18,6 +18,7 @@ ADMIN_REFRESH_TOKEN_COOKIE = "admin_refresh_token"
 @router.post(
     "/token-exchange",
     response_model=TokenExchangeResponse,
+    response_model_exclude={"refresh_token"},
     status_code=status.HTTP_200_OK,
 )
 async def token_exchange(payload: TokenExchangeRequest, response: Response) -> TokenExchangeResponse:

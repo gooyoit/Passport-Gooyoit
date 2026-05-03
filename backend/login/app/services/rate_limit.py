@@ -78,6 +78,17 @@ def check_login_lockout(redis_client: Redis | None, email: str, ip: str) -> None
         raise RateLimitExceeded("Account temporarily locked", redis_client.ttl(key))
 
 
+def check_registration_rate_limit(redis_client: Redis | None, ip: str) -> None:
+    if redis_client is None:
+        return
+    key = f"rate_limit:register:{ip}"
+    count = redis_client.incr(key)
+    if count == 1:
+        redis_client.expire(key, 3600)
+    if count > 5:
+        raise RateLimitExceeded("Registration rate limit exceeded", redis_client.ttl(key))
+
+
 def clear_failed_login(redis_client: Redis | None, email: str, ip: str) -> None:
     if redis_client is None:
         return

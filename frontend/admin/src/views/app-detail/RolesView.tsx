@@ -21,19 +21,21 @@ export default function RolesView({
   const [desc, setDesc] = useState("");
   const [isDefault, setIsDefault] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const data = await request<Role[]>(`/applications/${appId}/roles`, token);
-      setRoles(data);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-  }, [appId]);
+    let cancelled = false;
+    setLoading(true);
+    request<Role[]>(`/applications/${appId}/roles`, token)
+      .then((data) => {
+        if (!cancelled) setRoles(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load roles:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [appId, token]);
 
   async function create() {
     if (!code.trim() || !name.trim()) return;
@@ -51,7 +53,6 @@ export default function RolesView({
     setDesc("");
     setIsDefault(false);
     setOpen(false);
-    await load();
     onLoad();
   }
 

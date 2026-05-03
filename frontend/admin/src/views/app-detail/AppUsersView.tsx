@@ -18,30 +18,33 @@ export default function AppUsersView({
   const [userId, setUserId] = useState("");
   const [roleId, setRoleId] = useState("");
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [m, r] = await Promise.all([
-        request<ApplicationUser[]>(`/applications/${appId}/users`, token),
-        request<Role[]>(`/applications/${appId}/roles`, token),
-      ]);
-      setMembers(m);
-      setRoles(r);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-  }, [appId]);
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      request<ApplicationUser[]>(`/applications/${appId}/users`, token),
+      request<Role[]>(`/applications/${appId}/roles`, token),
+    ])
+      .then(([m, r]) => {
+        if (!cancelled) {
+          setMembers(m);
+          setRoles(r);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load app users:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [appId, token]);
 
   async function toggleStatus(userId: number, currentStatus: string) {
     await request(`/applications/${appId}/users/${userId}/status`, token, {
       method: "PATCH",
       body: JSON.stringify({ status: currentStatus === "active" ? "disabled" : "active" }),
     });
-    await load();
   }
 
   async function assignRole() {
@@ -54,7 +57,6 @@ export default function AppUsersView({
     setUserId("");
     setRoleId("");
     setAssignOpen(false);
-    await load();
   }
 
   if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;

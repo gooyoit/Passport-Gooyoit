@@ -8,8 +8,11 @@ import secrets
 from typing import Any
 
 import jwt
+import structlog
 
 from app.core.config import settings
+
+logger = structlog.get_logger(__name__)
 
 
 def utcnow() -> datetime:
@@ -49,7 +52,8 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
-    except Exception:
+    except (ValueError, TypeError):
+        logger.warning("password_verification_error")
         return False
 
 
