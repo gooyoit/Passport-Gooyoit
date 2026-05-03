@@ -161,13 +161,6 @@ class ApplicationUserStatusUpdate(BaseModel):
 # Config & token exchange (admin-specific)
 # ---------------------------------------------------------------------------
 
-class PublicConfig(BaseModel):
-    """Public configuration returned to the admin frontend."""
-
-    client_id: str
-    passport_base: str
-
-
 class TokenExchangeRequest(BaseModel):
     """Request body for exchanging an authorization code for tokens."""
 

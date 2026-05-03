@@ -17,8 +17,8 @@ GitHub: https://passport.example.com/oauth/providers/github/callback
 本地开发可使用：
 
 ```text
-Google: http://127.0.0.1:8000/oauth/providers/google/callback
-GitHub: http://127.0.0.1:8000/oauth/providers/github/callback
+Google: http://127.0.0.1:8080/oauth/providers/google/callback
+GitHub: http://127.0.0.1:8080/oauth/providers/github/callback
 ```
 
 业务系统自己的回调地址仍然配置在 `applications.redirect_uris`，例如：
@@ -32,7 +32,7 @@ https://console.example.com/auth/callback
 ## Google 登录方式配置
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/admin/applications/1/login-methods" \
+curl -X POST "http://127.0.0.1:8080/admin/applications/1/login-methods" \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: $ADMIN_API_TOKEN" \
   -d '{
@@ -60,7 +60,7 @@ curl -X POST "http://127.0.0.1:8000/admin/applications/1/login-methods" \
 ## GitHub 登录方式配置
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/admin/applications/1/login-methods" \
+curl -X POST "http://127.0.0.1:8080/admin/applications/1/login-methods" \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: $ADMIN_API_TOKEN" \
   -d '{
@@ -107,8 +107,8 @@ http://127.0.0.1:5173/?client_id=APP_CLIENT_ID&redirect_uri=https%3A%2F%2Fconsol
 ## 验证配置是否开启
 
 ```bash
-curl "http://127.0.0.1:8000/oauth/providers/google?client_id=APP_CLIENT_ID"
-curl "http://127.0.0.1:8000/oauth/providers/github?client_id=APP_CLIENT_ID"
+curl "http://127.0.0.1:8080/oauth/providers/google?client_id=APP_CLIENT_ID"
+curl "http://127.0.0.1:8080/oauth/providers/github?client_id=APP_CLIENT_ID"
 ```
 
 返回示例：

@@ -13,7 +13,7 @@ async def exchange_token(code: str, redirect_uri: str) -> TokenExchangeResponse:
     client credentials and the authorization code received from the
     browser redirect.
     """
-    url = f"{settings.passport_base_url}/oauth/token"
+    url = f"{settings.passport_api_url}/oauth/token"
     payload = {
         "client_id": settings.admin_client_id,
         "client_secret": settings.admin_client_secret,

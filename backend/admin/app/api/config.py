@@ -1,21 +1,11 @@
-"""Public configuration and token-exchange endpoints."""
+"""Token-exchange endpoint."""
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.config import settings
-from app.schemas import PublicConfig, TokenExchangeRequest, TokenExchangeResponse
+from app.schemas import TokenExchangeRequest, TokenExchangeResponse
 from app.services.passport import exchange_token
 
 router = APIRouter(tags=["config"])
-
-
-@router.get("/config", response_model=PublicConfig)
-def get_public_config() -> PublicConfig:
-    """Return the client_id and Passport base URL needed to initiate OAuth."""
-    return PublicConfig(
-        client_id=settings.admin_client_id,
-        passport_base=settings.passport_base_url,
-    )
 
 
 @router.post(

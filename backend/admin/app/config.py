@@ -18,7 +18,7 @@ class Settings(BaseSettings):
         default="dev-secret-change-me-with-32-bytes", min_length=32
     )
     jwt_issuer: str = "gooyoit-passport"
-    passport_base_url: str = "http://127.0.0.1:5173"
+    passport_api_url: str = "http://127.0.0.1:8080"
     admin_client_id: str
     admin_client_secret: str
     cors_origins: list[str] = [

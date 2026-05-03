@@ -1167,12 +1167,8 @@ export default function App() {
       load().catch(() => clearAuth());
     } else {
       // Not logged in — redirect to Passport login
-      request<{ client_id: string; passport_base: string }>("/config", null)
-        .then((config) => {
-          const redirectUri = window.location.origin + window.location.pathname;
-          window.location.href = buildAuthorizeUrl(config.passport_base, config.client_id, redirectUri);
-        })
-        .catch(() => setAuthChecked(true));
+      const redirectUri = window.location.origin + window.location.pathname;
+      window.location.href = buildAuthorizeUrl(redirectUri);
       return;
     }
     setAuthChecked(true);

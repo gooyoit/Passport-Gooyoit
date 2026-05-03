@@ -53,5 +53,9 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
 @pytest.fixture()
 def admin_headers() -> dict[str, str]:
-    """Return admin headers."""
-    return {"X-Admin-Token": settings.admin_api_token}
+    """Return admin auth headers using client credentials.
+
+    TODO: Replace with proper client_id/client_secret based auth
+    when admin API endpoints are refactored to use OAuth instead of X-Admin-Token.
+    """
+    return {"X-Admin-Token": "dev-admin-token"}

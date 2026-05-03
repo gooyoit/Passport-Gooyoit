@@ -25,15 +25,13 @@ export async function request<T>(
   return response.json() as Promise<T>;
 }
 
-export function buildAuthorizeUrl(
-  passportBase: string,
-  clientId: string,
-  redirectUri: string,
-) {
+export function buildAuthorizeUrl(redirectUri: string) {
+  const passportUrl = import.meta.env.VITE_PASSPORT_URL;
+  const clientId = import.meta.env.VITE_CLIENT_ID;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
   });
-  return `${passportBase}?${params}`;
+  return `${passportUrl}?${params}`;
 }
