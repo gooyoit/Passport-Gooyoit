@@ -154,6 +154,27 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [showCaptchaModal, setShowCaptchaModal] = useState(false);
   const [captchaError, setCaptchaError] = useState("");
+  const [loginMethods, setLoginMethods] = useState<string[]>([]);
+  const [emailPasswordEnabled, setEmailPasswordEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!oauth.clientId || !oauth.redirectUri) return;
+    api<{ login_methods: string[] }>(
+      `/oauth/authorize?client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent(oauth.redirectUri)}${oauth.state ? `&state=${encodeURIComponent(oauth.state)}` : ""}`
+    ).then((data) => {
+      const methods = (data as Record<string, unknown>).login_methods as string[] ?? [];
+      if (methods.length > 0) {
+        setLoginMethods(methods);
+        setEmailPasswordEnabled(methods.includes("email_password"));
+        if (!methods.includes("email_code")) {
+          setMode("password");
+        }
+      }
+    }).catch(() => {
+      setLoginMethods(["email_code"]);
+      setEmailPasswordEnabled(true);
+    });
+  }, []);
 
   async function fetchCaptcha() {
     try {
@@ -273,6 +294,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
                   placeholder="m@example.com"
                   required
                 />
+                {emailPasswordEnabled && (
                 <button
                   type="button"
                   className="text-btn mode-switch"
@@ -283,6 +305,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
                 >
                   {mode === "code" ? t("login.loginByPwd") : t("login.loginByCode")}
                 </button>
+                )}
               </div>
             </label>
 
@@ -355,6 +378,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
             <span />
           </div>
 
+          {loginMethods.includes("google") && (
           <a className="social-btn" href={providerUrl("google", oauth)}>
             <svg width="18" height="18" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -364,16 +388,21 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
             </svg>
             <span>{t("login.google")}</span>
           </a>
+          )}
 
+          {loginMethods.includes("github") && (
           <a className="social-btn" href={providerUrl("github", oauth)}>
             <GithubIcon size={18} />
             <span>{t("login.github")}</span>
           </a>
+          )}
 
+          {loginMethods.includes("wechat") && (
           <a className="social-btn" href={providerUrl("wechat", oauth)}>
             <FaWeixin size={18} color="#07C160" />
             <span>{t("login.wechat")}</span>
           </a>
+          )}
 
           <p className="switch-text">
             {t("login.noAccount")}
@@ -438,6 +467,17 @@ function RegisterPage({
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [showCaptchaModal, setShowCaptchaModal] = useState(false);
   const [captchaError, setCaptchaError] = useState("");
+  const [loginMethods, setLoginMethods] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!oauth.clientId || !oauth.redirectUri) return;
+    api<{ login_methods: string[] }>(
+      `/oauth/authorize?client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent(oauth.redirectUri)}${oauth.state ? `&state=${encodeURIComponent(oauth.state)}` : ""}`
+    ).then((data) => {
+      const methods = (data as Record<string, unknown>).login_methods as string[] ?? [];
+      if (methods.length > 0) setLoginMethods(methods);
+    }).catch(() => setLoginMethods(["email_code"]));
+  }, []);
 
   function set(k: string) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -628,6 +668,7 @@ function RegisterPage({
             <span />
           </div>
 
+          {loginMethods.includes("google") && (
           <a className="social-btn" href={providerUrl("google", oauth)}>
             <svg width="18" height="18" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -637,6 +678,21 @@ function RegisterPage({
             </svg>
             <span>{t("register.google")}</span>
           </a>
+          )}
+
+          {loginMethods.includes("github") && (
+          <a className="social-btn" href={providerUrl("github", oauth)}>
+            <GithubIcon size={18} />
+            <span>{t("register.github")}</span>
+          </a>
+          )}
+
+          {loginMethods.includes("wechat") && (
+          <a className="social-btn" href={providerUrl("wechat", oauth)}>
+            <FaWeixin size={18} color="#07C160" />
+            <span>{t("register.wechat")}</span>
+          </a>
+          )}
 
           {msg && <p className="msg">{msg}</p>}
 
