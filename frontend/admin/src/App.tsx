@@ -1174,17 +1174,11 @@ export default function App() {
   }, []);
 
   const clearAuth = useCallback(() => {
-    setAccessToken(null);
-    setRefreshToken(null);
-    setUserEmail(null);
-    setAuthenticated(false);
-    setApplications([]);
-    setUsers([]);
-    setSelectedApp(null);
-    setView("dashboard");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("userEmail");
+    const redirectUri = window.location.origin + window.location.pathname;
+    window.location.href = buildAuthorizeUrl(redirectUri);
   }, []);
 
   const load = useCallback(async () => {
@@ -1302,11 +1296,7 @@ export default function App() {
   }
 
   if (!authenticated) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-      </div>
-    );
+    return null;
   }
 
   return (
