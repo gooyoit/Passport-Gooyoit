@@ -119,18 +119,6 @@ def email_register(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Register a new user and return an authorization code."""
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-
-    try:
-        check_request_code_rate_limit(redis_client, str(payload.email), client_ip)
-    except RateLimitExceeded as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
-
     try:
         auth_code = complete_email_register(
             db,
