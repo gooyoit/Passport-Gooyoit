@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle,
+  ChevronLeft,
   ChevronRight,
   Copy,
   Download,
@@ -15,14 +16,12 @@ import {
   List,
   LogOut,
   Mail,
-  Menu,
   MessageCircle,
   Plus,
   RefreshCw,
   Search,
   Shield,
   Users,
-  X,
 } from "lucide-react";
 import type {
   Application,
@@ -37,28 +36,33 @@ import type {
   ViewKey,
 } from "./types";
 import { request, buildAuthorizeUrl } from "./lib/api";
-import { cn, methodDescription, methodLabel, statusColor, statusLabel } from "./lib/utils";
+import { cn, methodDescription, methodLabel } from "./lib/utils";
 
 /* ─── Reusable Components ──────────────────────────────────── */
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-white p-5 shadow-sm", className)}>
+    <section className={cn("overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]", className)}>
       {children}
-    </div>
+    </section>
   );
 }
 
 function SectionHeader({
   title,
+  description,
   action,
 }: {
   title: string;
+  description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between">
-      <h2 className="text-lg font-semibold text-[#17202a]">{title}</h2>
+    <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <h2 className="text-xl font-bold text-slate-950">{title}</h2>
+        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+      </div>
       {action}
     </div>
   );
@@ -69,37 +73,44 @@ function MetricCard({
   value,
   icon: Icon,
   color = "text-brand",
+  action,
+  onClick,
 }: {
   label: string;
   value: number;
   icon: React.ElementType;
   color?: string;
+  action?: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="flex items-center gap-4">
-      <div className={cn("flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light", color)}>
-        <Icon size={22} />
-      </div>
-      <div>
-        <p className="text-2xl font-bold">{value}</p>
-        <p className="text-sm text-muted">{label}</p>
-      </div>
+    <Card className="p-5">
+      <div className="text-sm font-medium text-slate-500">{label}</div>
+      <div className={cn("mt-3 text-4xl font-bold text-slate-950", color === "text-success" && "text-success")}>{value}</div>
+      {action && onClick ? (
+        <button type="button" className="mt-4 text-sm font-medium text-[#1a73e8]" onClick={onClick}>
+          {action}
+        </button>
+      ) : null}
     </Card>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", statusColor(status))}>
-      {statusLabel(status)}
+    <span
+      className={cn(
+        "inline-flex min-w-14 items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+        status === "active" ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-600",
+      )}
+    >
+      {status === "active" ? "正常" : "已禁用"}
     </span>
   );
 }
 
 function EmptyBlock({ text }: { text: string }) {
-  return (
-    <div className="py-12 text-center text-sm text-muted">{text}</div>
-  );
+  return <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">{text}</div>;
 }
 
 function Modal({
@@ -117,16 +128,19 @@ function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-surface">
-            <X size={18} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4" onClick={onClose}>
+      <div
+        className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <h3 className="text-xl font-bold text-slate-950">{title}</h3>
+          <button type="button" onClick={onClose} className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+            ×
           </button>
         </div>
-        <div className="space-y-3">{children}</div>
-        {actions && <div className="mt-5 flex justify-end gap-2">{actions}</div>}
+        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-5 py-5">{children}</div>
+        {actions && <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">{actions}</div>}
       </div>
     </div>
   );
@@ -150,9 +164,9 @@ function Field({
 const inputCls =
   "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20";
 const btnCls =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors";
-const btnPrimary = cn(btnCls, "bg-brand text-white hover:bg-brand-dark");
-const btnOutline = cn(btnCls, "border border-border bg-white hover:bg-surface");
+  "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition";
+const btnPrimary = cn(btnCls, "bg-[#1a73e8] text-white hover:bg-[#1557b0]");
+const btnOutline = cn(btnCls, "border border-slate-200 bg-white text-slate-800 hover:bg-slate-50");
 
 /* ─── CopyButton ──────────────────────────────────────── */
 
@@ -263,25 +277,28 @@ function SidebarItem({
   active,
   icon: Icon,
   label,
+  collapsed,
   onClick,
 }: {
   active: boolean;
   icon: React.ElementType;
   label: string;
+  collapsed: boolean;
   onClick: () => void;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-        active
-          ? "bg-sidebar-active text-white"
-          : "text-gray-400 hover:bg-sidebar-hover hover:text-white",
+        "flex h-14 items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
+        collapsed ? "justify-center md:px-0" : "",
+        active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50",
       )}
+      title={collapsed ? label : undefined}
     >
-      <Icon size={18} />
-      {label}
+      <span className={cn("shrink-0", active ? "text-[#1a73e8]" : "text-slate-700")}>{<Icon className="size-5" />}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </button>
   );
 }
@@ -304,41 +321,44 @@ function DashboardView({
   const activeApps = applications.filter((a) => a.status === "active").length;
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="应用总数" value={applications.length} icon={Globe} />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <MetricCard label="应用总数" value={applications.length} icon={Globe} action="查看全部" onClick={() => onNavigate("applications")} />
         <MetricCard label="活跃应用" value={activeApps} icon={CheckCircle} color="text-success" />
-        <MetricCard label="用户总数" value={users.length} icon={Users} />
+        <MetricCard label="用户总数" value={users.length} icon={Users} action="查看全部" onClick={() => onNavigate("users")} />
         <MetricCard label="活跃用户" value={activeUsers} icon={CheckCircle} color="text-success" />
       </div>
 
       <Card>
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">最近应用</h3>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setAppLayout("grid")}
-              className={cn(
-                "rounded-md p-1.5 transition-colors",
-                appLayout === "grid" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
-              )}
-            >
-              <LayoutGrid size={15} />
-            </button>
-            <button
-              onClick={() => setAppLayout("list")}
-              className={cn(
-                "rounded-md p-1.5 transition-colors",
-                appLayout === "list" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
-              )}
-            >
-              <List size={15} />
-            </button>
-            <span className="mx-1 h-4 w-px bg-border" />
-            <button onClick={() => onNavigate("applications")} className={cn(btnOutline, "text-xs")}>
-              查看全部
-            </button>
-          </div>
-        </div>
+        <SectionHeader
+          title="最近应用"
+          description="展示最近创建或更新的接入系统"
+          action={
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setAppLayout("grid")}
+                className={cn(
+                  "rounded-xl p-2 transition-colors",
+                  appLayout === "grid" ? "bg-brand-light text-brand" : "text-muted hover:bg-slate-50",
+                )}
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setAppLayout("list")}
+                className={cn(
+                  "rounded-xl p-2 transition-colors",
+                  appLayout === "list" ? "bg-brand-light text-brand" : "text-muted hover:bg-slate-50",
+                )}
+              >
+                <List size={16} />
+              </button>
+              <span className="mx-1 h-4 w-px bg-slate-200" />
+              <button onClick={() => onNavigate("applications")} className={cn(btnOutline, "text-xs")}>
+                查看全部
+              </button>
+            </div>
+          }
+        />
         {applications.length === 0 ? (
           <EmptyBlock text="暂无应用" />
         ) : appLayout === "grid" ? (
@@ -346,14 +366,14 @@ function DashboardView({
             {applications.slice(0, 8).map((app) => (
               <div
                 key={app.id}
-                className="group cursor-pointer rounded-xl border border-border p-4 transition-all hover:border-brand/40 hover:shadow-sm"
+                className="group cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#1a73e8]/40 hover:shadow-sm"
                 onClick={() => onSelectApp(app)}
               >
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-light text-brand">
                   <Globe size={20} />
                 </div>
-                <p className="truncate text-sm font-semibold">{app.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">{app.client_id}</p>
+                <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{app.client_id}</p>
                 <div className="mt-2">
                   <StatusBadge status={app.status} />
                 </div>
@@ -361,11 +381,11 @@ function DashboardView({
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-border rounded-lg border border-border">
+          <div className="divide-y divide-slate-200">
             {applications.slice(0, 8).map((app) => (
               <div
                 key={app.id}
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface"
+                className="flex items-center justify-between px-5 py-4 cursor-pointer transition hover:bg-slate-50"
                 onClick={() => onSelectApp(app)}
               >
                 <div className="flex items-center gap-3">
@@ -373,8 +393,8 @@ function DashboardView({
                     <Globe size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{app.name}</p>
-                    <p className="text-xs text-muted">{app.client_id}</p>
+                    <p className="text-sm font-semibold text-slate-900">{app.name}</p>
+                    <p className="text-xs text-slate-500">{app.client_id}</p>
                   </div>
                 </div>
                 <StatusBadge status={app.status} />
@@ -495,6 +515,7 @@ function ApplicationsView({
       <Card>
         <SectionHeader
           title="应用列表"
+          description="管理所有 OAuth 接入系统"
           action={
             <button onClick={() => { resetForm(); setOpen(true); }} className={btnPrimary}>
               <Plus size={16} /> 新建应用
@@ -615,7 +636,7 @@ function UsersView({
   );
   return (
     <Card>
-      <SectionHeader title="全局用户" />
+      <SectionHeader title="全局用户" description="管理 Passport 注册用户状态" />
       <div className="mb-4 flex items-center gap-2">
         <Search size={16} className="text-muted" />
         <input
@@ -629,31 +650,31 @@ function UsersView({
         <EmptyBlock text="暂无用户" />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted">
-                <th className="px-4 py-2 font-medium">邮箱</th>
-                <th className="px-4 py-2 font-medium">显示名</th>
-                <th className="px-4 py-2 font-medium">状态</th>
-                <th className="px-4 py-2 font-medium">操作</th>
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">邮箱</th>
+                <th className="px-4 py-3">显示名</th>
+                <th className="px-4 py-3">状态</th>
+                <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-slate-200">
               {filtered.map((user) => (
-                <tr key={user.id} className="hover:bg-surface">
-                  <td className="px-4 py-3 font-medium">{user.email}</td>
-                  <td className="px-4 py-3 text-muted">{user.display_name ?? "-"}</td>
-                  <td className="px-4 py-3">
+                <tr key={user.id} className="bg-white hover:bg-slate-50">
+                  <td className="px-4 py-4 font-medium text-slate-900">{user.email}</td>
+                  <td className="px-4 py-4 text-slate-500">{user.display_name ?? "-"}</td>
+                  <td className="px-4 py-4">
                     <StatusBadge status={user.status} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4">
                     <button
                       onClick={() => onToggleStatus(user.id, user.status)}
                       className={cn(
-                        "rounded-md px-2.5 py-1 text-xs font-medium",
+                        "inline-flex h-8 items-center justify-center rounded-xl border px-3 text-xs font-semibold whitespace-nowrap transition",
                         user.status === "active"
-                          ? "bg-danger-light text-danger hover:bg-danger hover:text-white"
-                          : "bg-success-light text-success hover:bg-success hover:text-white",
+                          ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                          : "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
                       )}
                     >
                       {user.status === "active" ? "禁用" : "启用"}
@@ -734,7 +755,7 @@ function AppDetailLayout({
             </div>
           </div>
         </div>
-        <div className="border-b border-border px-6 pt-3">
+        <div className="border-b border-slate-200 px-5 pt-3">
           <div className="flex gap-1">
             {tabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -745,8 +766,8 @@ function AppDetailLayout({
                   className={cn(
                     "flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors",
                     activeTab === tab.key
-                      ? "bg-surface text-brand border-b-2 border-brand -mb-px"
-                      : "text-muted hover:text-[#17202a] hover:bg-surface/50",
+                      ? "bg-[#f6f7f8] text-[#1a73e8] border-b-2 border-[#1a73e8] -mb-px"
+                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
                   )}
                 >
                   <TabIcon size={15} />
@@ -1458,6 +1479,7 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [view, setView] = useState<ViewKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [secretModal, setSecretModal] = useState<{ clientId: string; clientSecret: string } | null>(null);
   const [secretsVersion, setSecretsVersion] = useState(0);
@@ -1623,106 +1645,141 @@ export default function App() {
     );
   }
 
+  const viewMeta: Record<ViewKey, { title: string; subtitle: string; icon: React.ElementType }> = {
+    dashboard: { title: "仪表盘", subtitle: "系统概览与统计数据", icon: LayoutDashboard },
+    applications: { title: "应用管理", subtitle: "管理 OAuth 接入系统", icon: Globe },
+    users: { title: "用户管理", subtitle: "管理全局用户状态", icon: Users },
+    "login-methods": { title: "登录方式", subtitle: "配置应用的登录方式", icon: Key },
+    secrets: { title: "密钥管理", subtitle: "管理应用的密钥", icon: Shield },
+    roles: { title: "角色管理", subtitle: "管理应用角色", icon: List },
+    permissions: { title: "权限管理", subtitle: "管理应用权限与角色分配", icon: Key },
+    "app-users": { title: "应用用户", subtitle: "管理应用用户与角色", icon: Users },
+  };
+
+  const currentView = viewMeta[view] ?? viewMeta.dashboard;
+
   if (!authenticated) {
     return null;
   }
 
   return (
-    <div className="flex min-h-screen bg-surface">
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      <aside
+    <div className="min-h-screen bg-[#f6f7f8] text-slate-900">
+      <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 bg-sidebar text-white transition-transform lg:static lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          "min-h-screen md:grid",
+          sidebarCollapsed ? "md:grid-cols-[88px_minmax(0,1fr)]" : "md:grid-cols-[272px_minmax(0,1fr)]",
         )}
       >
-        <div className="flex h-full flex-col p-4">
-          <div className="mb-6 flex items-center gap-2.5">
-            <Shield size={24} className="text-brand" />
-            <span className="text-lg font-bold">Passport</span>
-          </div>
-          {authenticated && userEmail && (
-            <p className="mb-4 text-xs text-gray-500 truncate">{userEmail}</p>
+        <aside
+          className={cn(
+            "border-b border-slate-200 bg-white md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r",
+            sidebarCollapsed && "md:px-0",
           )}
-          <nav className="flex-1 space-y-1">
-            {NAV_ITEMS.map((item) => (
-              <SidebarItem
-                key={item.key}
-                active={
-                  item.key === view ||
-                  (item.key === "applications" && !!selectedApp)
-                }
-                icon={item.icon}
-                label={item.label}
-                onClick={() => navigate(item.key)}
-              />
-            ))}
-            {selectedApp && (
-              <div className="mx-2 mt-1">
-                <button
-                  onClick={() => openAppDetail(selectedApp)}
-                  className="flex w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-sidebar-hover hover:text-white"
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand/20">
-                    <Globe size={13} className="text-brand" />
-                  </div>
-                  <span className="truncate">{selectedApp.name}</span>
-                  <ChevronRight size={14} className="ml-auto shrink-0 text-gray-500" />
-                </button>
+        >
+          <div className="flex items-center justify-between px-4 py-4 md:px-5">
+            <div className={cn("min-w-0", sidebarCollapsed && "md:hidden")}>
+              <div className="truncate whitespace-nowrap text-[1.15rem] leading-tight font-bold text-slate-950">
+                Passport 管理台
               </div>
-            )}
-          </nav>
-          <div className="border-t border-gray-700 pt-3">
-            <button
-              onClick={() => {
-                clearAuth();
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-sidebar-hover hover:text-white"
-            >
-              <LogOut size={16} />
-              退出登录
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border bg-white px-4 py-3 lg:px-6">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-1.5 hover:bg-surface lg:hidden">
-              <Menu size={20} />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold">
-                {view === "dashboard" && "仪表盘"}
-                {view === "applications" && "应用管理"}
-                {view === "users" && "用户管理"}
-                {selectedApp && ["login-methods", "roles", "permissions", "app-users"].includes(view) && selectedApp.name}
-              </h1>
-              <p className="text-xs text-muted">
-                {view === "dashboard" && "系统概览与统计数据"}
-                {view === "applications" && "管理 OAuth 接入系统"}
-                {view === "users" && "管理全局用户状态"}
-                {view === "login-methods" && "配置应用的登录方式"}
-                {view === "roles" && "管理应用角色"}
-                {view === "permissions" && "管理应用权限与角色分配"}
-                {view === "app-users" && "管理应用用户与角色"}
-              </p>
+              <div className="mt-2 text-sm text-slate-500">统一认证管理</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 md:hidden"
+                onClick={() => setSidebarOpen((v) => !v)}
+              >
+                {sidebarOpen ? <ChevronLeft className="size-5" /> : <ChevronRight className="size-5" />}
+              </button>
+              <button
+                type="button"
+                className="hidden size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 md:inline-flex"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+              >
+                {sidebarCollapsed ? <ChevronRight className="size-5" /> : <ChevronLeft className="size-5" />}
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => load()}
-            className="rounded-lg p-2 hover:bg-surface"
-            title="刷新数据"
-          >
-            <RefreshCw size={18} className={loading ? "animate-spin text-muted" : "text-muted"} />
-          </button>
-        </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <div className={cn("border-t border-slate-100 px-3 pb-4 pt-3 md:border-t-0", !sidebarOpen && "hidden md:block")}>
+            <div className={cn("mb-3 px-3 text-xs font-semibold tracking-[0.14em] text-slate-400", sidebarCollapsed && "md:hidden")}>
+              管理导航
+            </div>
+            <nav className="grid gap-1.5">
+              {NAV_ITEMS.map((item) => (
+                <SidebarItem
+                  key={item.key}
+                  active={item.key === view || (item.key === "applications" && !!selectedApp)}
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={sidebarCollapsed}
+                  onClick={() => { navigate(item.key); setSidebarOpen(false); }}
+                />
+              ))}
+            </nav>
+
+            {selectedApp && (
+              <>
+                <div className="my-5 border-t border-slate-200" />
+                <div className={cn("mb-3 px-3 text-xs font-semibold tracking-[0.14em] text-slate-400", sidebarCollapsed && "md:hidden")}>
+                  当前应用
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openAppDetail(selectedApp)}
+                  className={cn(
+                    "flex h-14 w-full items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
+                    sidebarCollapsed ? "justify-center md:px-0" : "",
+                    "text-slate-700 hover:bg-slate-50",
+                  )}
+                  title={sidebarCollapsed ? selectedApp.name : undefined}
+                >
+                  <span className="shrink-0 text-[#1a73e8]"><Globe className="size-5" /></span>
+                  {!sidebarCollapsed && <span className="truncate">{selectedApp.name}</span>}
+                </button>
+              </>
+            )}
+
+            <div className="my-5 border-t border-slate-200" />
+            <button
+              type="button"
+              onClick={clearAuth}
+              className={cn(
+                "flex h-14 w-full items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
+                sidebarCollapsed ? "justify-center md:px-0" : "",
+                "text-slate-700 hover:bg-slate-50",
+              )}
+              title={sidebarCollapsed ? "退出登录" : undefined}
+            >
+              <span className="shrink-0 text-slate-700"><LogOut className="size-5" /></span>
+              {!sidebarCollapsed && <span>退出登录</span>}
+            </button>
+          </div>
+        </aside>
+
+        <div className="min-w-0">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3">
+                  <currentView.icon className="size-6 text-[#1a73e8]" />
+                  <h1 className="text-[2rem] leading-none font-bold text-slate-950">{currentView.title}</h1>
+                </div>
+                <div className="mt-2 text-sm text-slate-500">{currentView.subtitle}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => load()}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                  刷新
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="space-y-5 p-4 md:p-6">
           {view === "dashboard" && (
             <DashboardView applications={applications} users={users} onNavigate={navigate} onSelectApp={openAppDetail} />
           )}
@@ -1772,6 +1829,7 @@ export default function App() {
             </AppDetailLayout>
           )}
         </main>
+        </div>
       </div>
 
       <ToastContainer items={toasts} />
