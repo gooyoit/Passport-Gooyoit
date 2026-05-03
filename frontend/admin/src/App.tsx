@@ -1181,13 +1181,14 @@ export default function App() {
     window.location.href = buildAuthorizeUrl(redirectUri);
   }, []);
 
-  const load = useCallback(async () => {
-    if (!accessToken) return;
+  const load = useCallback(async (token?: string | null) => {
+    const t = token ?? accessToken;
+    if (!t) return;
     setLoading(true);
     try {
       const [apps, userList] = await Promise.all([
-        request<Application[]>("/applications", accessToken),
-        request<User[]>("/users", accessToken),
+        request<Application[]>("/applications", t),
+        request<User[]>("/users", t),
       ]);
       setApplications(apps);
       setUsers(userList);
@@ -1222,7 +1223,7 @@ export default function App() {
           localStorage.setItem("userEmail", data.user.email);
           setAuthenticated(true);
           setAuthChecked(true);
-          load();
+          load(data.access_token);
         })
         .catch((err) => {
           toast((err as Error).message);
