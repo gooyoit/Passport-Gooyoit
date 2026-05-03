@@ -134,6 +134,8 @@ def regenerate_secret(
         ApplicationClientSecret(
             application_id=application.id,
             secret_hash=_hash_secret(new_secret),
+            secret_prefix=new_secret[:8],
+            secret_suffix=new_secret[-4:],
         )
     )
     db.commit()
@@ -147,30 +149,20 @@ def regenerate_secret(
 def list_secrets(
     application_id: int,
     db: Session = Depends(get_db),
-) -> list[dict]:
+) -> list[ApplicationClientSecret]:
     """List client secrets for an application (no plaintext)."""
     application = db.get(Application, application_id)
     if application is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
         )
-    rows = list(
+    return list(
         db.scalars(
             select(ApplicationClientSecret)
             .where(ApplicationClientSecret.application_id == application_id)
             .order_by(ApplicationClientSecret.id.desc())
         ).all()
     )
-    result = []
-    for row in rows:
-        h = row.secret_hash
-        if h.startswith("sha256:"):
-            body = h[7:]
-            masked = "sha256:" + body[:12] + "•" * 12 + body[-4:] if len(body) > 16 else h
-        else:
-            masked = h[:8] + "•" * 16 + h[-4:] if len(h) > 12 else "•" * len(h)
-        result.append({"id": row.id, "masked_hash": masked, "created_at": row.created_at})
-    return result
 
 
 @router.delete("/applications/{application_id}/secrets/{secret_id}")

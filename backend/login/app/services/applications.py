@@ -37,6 +37,8 @@ def create_application(
     db.add(ApplicationClientSecret(
         application_id=application.id,
         secret_hash=hash_secret(client_secret),
+        secret_prefix=client_secret[:8],
+        secret_suffix=client_secret[-4:],
     ))
 
     default_role = Role(

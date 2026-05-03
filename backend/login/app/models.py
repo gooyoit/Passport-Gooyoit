@@ -86,6 +86,8 @@ class ApplicationClientSecret(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
     secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    secret_prefix: Mapped[str | None] = mapped_column(String(16))
+    secret_suffix: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

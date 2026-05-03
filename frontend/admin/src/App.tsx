@@ -814,7 +814,9 @@ function SecretsView({
             <div key={s.id} className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-sm font-mono text-muted">
-                  {s.masked_hash}
+                  {s.secret_prefix && s.secret_suffix
+                    ? `${s.secret_prefix}••••••••••••${s.secret_suffix}`
+                    : "••••••••••••••••••••••••••••••"}
                   <span className="ml-2 text-xs text-muted/60">#{s.id}</span>
                 </p>
                 <p className="text-xs text-muted/60">
