@@ -49,6 +49,7 @@ class ApplicationUpdate(BaseModel):
     redirect_uris: list[HttpUrl] | None = None
     enable_public_users: bool | None = None
     enable_sso: bool | None = None
+    status: str | None = Field(None, pattern="^(active|disabled)$")
 
 
 class ClientSecretResponse(BaseModel):

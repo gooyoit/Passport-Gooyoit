@@ -101,6 +101,8 @@ def update_application(
         application.enable_public_users = payload.enable_public_users
     if payload.enable_sso is not None:
         application.enable_sso = payload.enable_sso
+    if payload.status is not None:
+        application.status = payload.status
     db.commit()
     db.refresh(application)
     return application

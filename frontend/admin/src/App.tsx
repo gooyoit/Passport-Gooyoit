@@ -399,7 +399,7 @@ function ApplicationsView({
   applications: Application[];
   onLoad: () => void;
   onCreate: (name: string, redirectUris: string[], enableSSO: boolean, enablePublicUsers: boolean, description?: string) => void;
-  onUpdate: (id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) => void;
+  onUpdate: (id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean; status?: string }) => void;
   onRegenerateSecret: (appId: number, clientId: string) => void;
   onDeleteSecret: (appId: number, secretId: number) => void;
   onSelect: (app: Application) => void;
@@ -411,6 +411,7 @@ function ApplicationsView({
   const [uris, setUris] = useState("");
   const [enableSSO, setEnableSSO] = useState(true);
   const [enablePublicUsers, setEnablePublicUsers] = useState(false);
+  const [appStatus, setAppStatus] = useState("active");
 
   function resetForm() {
     setName("");
@@ -418,6 +419,7 @@ function ApplicationsView({
     setUris("");
     setEnableSSO(true);
     setEnablePublicUsers(false);
+    setAppStatus("active");
   }
 
   function openEdit(app: Application) {
@@ -427,6 +429,7 @@ function ApplicationsView({
     setUris(app.redirect_uris.join("\n"));
     setEnableSSO(app.enable_sso);
     setEnablePublicUsers(app.enable_public_users);
+    setAppStatus(app.status);
   }
 
   function handleCreate() {
@@ -445,6 +448,7 @@ function ApplicationsView({
       redirect_uris: uris.split("\n").map((s) => s.trim()).filter(Boolean),
       enable_sso: enableSSO,
       enable_public_users: enablePublicUsers,
+      status: appStatus,
     });
     setEditingApp(null);
     resetForm();
@@ -477,6 +481,12 @@ function ApplicationsView({
           允许公开注册
         </label>
       </div>
+      <Field label="应用状态">
+        <select className={inputCls} value={appStatus} onChange={(e) => setAppStatus(e.target.value)}>
+          <option value="active">启用</option>
+          <option value="disabled">禁用</option>
+        </select>
+      </Field>
     </>
   );
 
@@ -1567,7 +1577,7 @@ export default function App() {
     toast(`应用「${name}」创建成功`, "success");
   }
 
-  async function updateApplication(id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) {
+  async function updateApplication(id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean; status?: string }) {
     await request(`/applications/${id}`, accessToken, {
       method: "PATCH",
       body: JSON.stringify(data),
