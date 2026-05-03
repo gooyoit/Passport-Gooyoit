@@ -275,6 +275,14 @@ button, input, a { font: inherit; }
 .code-row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-msg {
+  width: 100%;
+  font-size: 13px;
+  color: #EF4444;
+  margin: 0;
 }
 
 .code-row input {

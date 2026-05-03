@@ -146,6 +146,8 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
   const [loading, setLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [msg, setMsg] = useState("");
+  const [codeMsg, setCodeMsg] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
   const [captchaKey, setCaptchaKey] = useState("");
   const [captchaImage, setCaptchaImage] = useState("");
@@ -163,8 +165,15 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
     } catch { /* silent */ }
   }
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
   async function requestCode(e: FormEvent) {
     e.preventDefault();
+    if (cooldown > 0) return;
     await fetchCaptcha();
     setShowCaptchaModal(true);
   }
@@ -186,13 +195,19 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
       );
       setDebugCode(r.debug_code ?? "");
       setCodeSent(true);
-      setMsg(t("login.codeSent"));
+      setCodeMsg(t("login.codeSent"));
+      setCooldown(60);
       setShowCaptchaModal(false);
-      setCaptchaError("");
     } catch (err) {
-      setCaptchaError((err as Error).message);
-      fetchCaptcha();
-      setCaptchaAnswer("");
+      const msg = (err as Error).message;
+      if (msg.includes("429") || msg.includes("Too Many")) {
+        setShowCaptchaModal(false);
+        setCodeMsg(t("login.tooFrequent"));
+      } else {
+        setCaptchaError(msg);
+        fetchCaptcha();
+        setCaptchaAnswer("");
+      }
     } finally {
       setLoading(false);
     }
@@ -288,10 +303,11 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
                     type="button"
                     className="send-code-btn inline"
                     onClick={requestCode}
-                    disabled={loading || !email}
+                    disabled={loading || !email || cooldown > 0}
                   >
-                    {codeSent ? t("login.resend") : t("login.sendCode")}
+                    {cooldown > 0 ? `${cooldown}s` : codeSent ? t("login.resend") : t("login.sendCode")}
                   </button>
+                  {codeMsg && <p className="field-msg">{codeMsg}</p>}
                 </div>
               </label>
               </>
@@ -415,6 +431,8 @@ function RegisterPage({
   const [loading, setLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [msg, setMsg] = useState("");
+  const [codeMsg, setCodeMsg] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const [captchaKey, setCaptchaKey] = useState("");
   const [captchaImage, setCaptchaImage] = useState("");
   const [captchaAnswer, setCaptchaAnswer] = useState("");
@@ -436,8 +454,15 @@ function RegisterPage({
     } catch { /* silent */ }
   }
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
   async function requestCode(e: FormEvent) {
     e.preventDefault();
+    if (cooldown > 0) return;
     await fetchCaptcha();
     setShowCaptchaModal(true);
   }
@@ -455,13 +480,19 @@ function RegisterPage({
         body: JSON.stringify({ client_id: oauth.clientId, email: form.email, captcha_key: captchaKey, captcha_answer: captchaAnswer, purpose: "register" }),
       });
       setCodeSent(true);
-      setMsg(t("register.codeSent"));
+      setCodeMsg(t("register.codeSent"));
+      setCooldown(60);
       setShowCaptchaModal(false);
-      setCaptchaError("");
     } catch (err) {
-      setCaptchaError((err as Error).message);
-      fetchCaptcha();
-      setCaptchaAnswer("");
+      const msg = (err as Error).message;
+      if (msg.includes("429") || msg.includes("Too Many")) {
+        setShowCaptchaModal(false);
+        setCodeMsg(t("register.tooFrequent"));
+      } else {
+        setCaptchaError(msg);
+        fetchCaptcha();
+        setCaptchaAnswer("");
+      }
     } finally {
       setLoading(false);
     }
@@ -557,10 +588,11 @@ function RegisterPage({
                   type="button"
                   className="send-code-btn inline"
                   onClick={requestCode}
-                  disabled={loading || !form.email}
+                  disabled={loading || !form.email || cooldown > 0}
                 >
-                  {codeSent ? t("register.resend") : t("register.sendCode")}
+                  {cooldown > 0 ? `${cooldown}s` : codeSent ? t("register.resend") : t("register.sendCode")}
                 </button>
+                {codeMsg && <p className="field-msg">{codeMsg}</p>}
               </div>
             </label>
 
