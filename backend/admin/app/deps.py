@@ -21,7 +21,7 @@ async def _verify_token(credentials: HTTPAuthorizationCredentials) -> dict:
                 headers={"Authorization": f"Bearer {credentials.credentials}"},
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
     except httpx.HTTPStatusError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -32,6 +32,12 @@ async def _verify_token(credentials: HTTPAuthorizationCredentials) -> dict:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Passport service unavailable",
         )
+    if not data.get("user") or "id" not in data.get("user", {}):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid userinfo response from Passport",
+        )
+    return data
 
 
 async def _parse_token(

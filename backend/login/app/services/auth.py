@@ -20,6 +20,7 @@ from app.core.security import (
     verify_secret,
 )
 from app.models import (
+    UserStatus,
     Application,
     ApplicationClientSecret,
     ApplicationUser,
@@ -416,7 +417,7 @@ def ensure_application_user(
         )
     )
     if membership is not None:
-        if membership.status != "active":
+        if membership.status != UserStatus.ACTIVE:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Application user is disabled",
@@ -469,10 +470,10 @@ def exchange_authorization_code(
     auth_code.used_at = now
 
     user = db.get(User, auth_code.user_id)
-    if user is None or user.status != "active":
+    if user is None or user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
     membership = ensure_application_user(db, application=application, user=user)
-    if membership.status != "active":
+    if membership.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
 
     access_token, roles, permissions = issue_access_token_for_user(
@@ -543,7 +544,7 @@ def refresh_access_token(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user = db.get(User, token.user_id)
-    if user is None or user.status != "active":
+    if user is None or user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
     ensure_application_user(db, application=application, user=user)
 

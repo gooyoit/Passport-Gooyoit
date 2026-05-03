@@ -17,6 +17,18 @@ export async function request<T>(
     credentials: "include",
     headers,
   });
+  if (response.status === 401 && !path.includes("token-refresh")) {
+    const refreshRes = await fetch(`${API_BASE}/token-refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    if (refreshRes.ok) {
+      const refreshData = await refreshRes.json();
+      window.dispatchEvent(new CustomEvent("token-refreshed", { detail: refreshData }));
+      return request<T>(path, refreshData.access_token, options);
+    }
+  }
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(detail || response.statusText);

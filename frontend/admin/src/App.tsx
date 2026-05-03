@@ -396,7 +396,6 @@ function ApplicationsView({
   onCreate,
   onUpdate,
   onRegenerateSecret,
-  onDeleteSecret,
   onSelect,
   canCreate,
 }: {
@@ -405,7 +404,6 @@ function ApplicationsView({
   onCreate: (name: string, redirectUris: string[], enableSSO: boolean, enablePublicUsers: boolean, description?: string) => void;
   onUpdate: (id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean; status?: string }) => void;
   onRegenerateSecret: (appId: number, clientId: string) => void;
-  onDeleteSecret: (appId: number, secretId: number) => void;
   onSelect: (app: Application) => void;
   canCreate: boolean;
 }) {
@@ -1457,8 +1455,7 @@ function AppUsersView({
 /* ─── Main App ──────────────────────────────────────────────── */
 
 export default function App() {
-  const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem("accessToken"));
-  const [_refreshToken, setRefreshToken] = useState<string | null>(localStorage.getItem("refreshToken"));
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem("userRoles");
@@ -1491,10 +1488,12 @@ export default function App() {
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
     localStorage.removeItem("userEmail");
     localStorage.removeItem("userRoles");
+    localStorage.removeItem("refreshToken");
     setUserRoles([]);
+    const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+    fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" }).catch(() => {});
     const redirectUri = window.location.origin + window.location.pathname;
     window.location.href = buildAuthorizeUrl(redirectUri);
   }, []);
@@ -1534,11 +1533,7 @@ export default function App() {
       })
         .then((data) => {
           setAccessToken(data.access_token);
-          setRefreshToken(data.refresh_token);
           setUserEmail(data.user.email);
-          localStorage.setItem("accessToken", data.access_token);
-          localStorage.setItem("refreshToken", data.refresh_token);
-          localStorage.setItem("userEmail", data.user.email);
           localStorage.setItem("userRoles", JSON.stringify(data.roles));
           setUserRoles(data.roles);
           setAuthenticated(true);
@@ -1551,16 +1546,42 @@ export default function App() {
         });
       return;
     }
-    // Restore session from localStorage
-    if (accessToken) {
-      load().catch(() => clearAuth());
-    } else {
-      // Not logged in — redirect to Passport login
-      const redirectUri = window.location.origin + window.location.pathname;
-      window.location.href = buildAuthorizeUrl(redirectUri);
-      return;
-    }
-    setAuthChecked(true);
+    const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+    fetch(`${API_BASE}/token-refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("refresh failed");
+        return res.json();
+      })
+      .then((data) => {
+        setAccessToken(data.access_token);
+        setUserEmail(data.user.email);
+        setUserRoles(data.roles);
+        localStorage.setItem("userRoles", JSON.stringify(data.roles));
+        setAuthenticated(true);
+        setAuthChecked(true);
+        load(data.access_token);
+      })
+      .catch(() => {
+        const redirectUri = window.location.origin + window.location.pathname;
+        window.location.href = buildAuthorizeUrl(redirectUri);
+      });
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      setAccessToken(e.detail.access_token);
+      if (e.detail.user?.email) setUserEmail(e.detail.user.email);
+      if (e.detail.roles) {
+        setUserRoles(e.detail.roles);
+        localStorage.setItem("userRoles", JSON.stringify(e.detail.roles));
+      }
+    };
+    window.addEventListener("token-refreshed", handler as EventListener);
+    return () => window.removeEventListener("token-refreshed", handler as EventListener);
   }, []);
 
   const navigate = useCallback(
@@ -1753,7 +1774,6 @@ export default function App() {
               onCreate={(name, uris, sso, pub, desc) => createApplication(name, uris, sso, pub, desc).catch((e) => toast(e.message))}
               onUpdate={updateApplication}
               onRegenerateSecret={regenerateSecret}
-              onDeleteSecret={deleteSecret}
               onSelect={openAppDetail}
               canCreate={isSuperAdmin}
             />

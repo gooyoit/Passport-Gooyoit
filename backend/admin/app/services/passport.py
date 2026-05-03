@@ -25,3 +25,22 @@ async def exchange_token(code: str, redirect_uri: str) -> TokenExchangeResponse:
         response.raise_for_status()
         data = response.json()
     return TokenExchangeResponse(**data)
+
+
+async def refresh_admin_token(refresh_token: str) -> TokenExchangeResponse:
+    """Refresh an admin access token via Passport.
+
+    Calls ``POST {passport_base_url}/oauth/token/refresh`` with the admin
+    client credentials and the HttpOnly cookie refresh token.
+    """
+    url = f"{settings.passport_api_url}/oauth/token/refresh"
+    payload = {
+        "client_id": settings.admin_client_id,
+        "client_secret": settings.admin_client_secret,
+        "refresh_token": refresh_token,
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+    return TokenExchangeResponse(**data)

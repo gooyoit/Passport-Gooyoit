@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
-from app.models import ApplicationLoginMethod, User
+from app.models import ApplicationLoginMethod, User, UserStatus
 from app.schemas import (
     LogoutRequest,
     OAuthProviderRead,
@@ -311,7 +311,7 @@ def userinfo(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     user = db.get(User, int(claims["sub"]))
-    if user is None or user.status != "active":
+    if user is None or user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
 
     application_id = int(claims["application_id"])
