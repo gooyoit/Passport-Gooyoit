@@ -61,6 +61,7 @@ class ClientSecretItem(BaseModel):
     """An existing client secret (no plaintext)."""
 
     id: int
+    masked_hash: str
     created_at: datetime
 
 

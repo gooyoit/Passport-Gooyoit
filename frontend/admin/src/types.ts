@@ -87,5 +87,6 @@ export type ViewKey =
 
 export interface ClientSecretItem {
   id: number;
+  masked_hash: string;
   created_at: string;
 }

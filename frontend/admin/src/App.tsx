@@ -814,8 +814,8 @@ function SecretsView({
             <div key={s.id} className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-sm font-mono text-muted">
-                  {"•".repeat(32)}
-                  <span className="ml-2 text-xs text-muted/60">{s.id}</span>
+                  {s.masked_hash}
+                  <span className="ml-2 text-xs text-muted/60">#{s.id}</span>
                 </p>
                 <p className="text-xs text-muted/60">
                   创建于 {new Date(s.created_at).toLocaleString("zh-CN")}

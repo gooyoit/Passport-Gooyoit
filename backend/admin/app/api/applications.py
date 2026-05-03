@@ -147,19 +147,26 @@ def regenerate_secret(
 def list_secrets(
     application_id: int,
     db: Session = Depends(get_db),
-) -> list[ApplicationClientSecret]:
+) -> list[dict]:
     """List client secrets for an application (no plaintext)."""
     application = db.get(Application, application_id)
     if application is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
         )
-    return list(
+    rows = list(
         db.scalars(
             select(ApplicationClientSecret)
             .where(ApplicationClientSecret.application_id == application_id)
             .order_by(ApplicationClientSecret.id.desc())
         ).all()
+    )
+    result = []
+    for row in rows:
+        h = row.secret_hash
+        masked = h[:8] + "•" * 16 + h[-4:] if len(h) > 12 else "•" * len(h)
+        result.append({"id": row.id, "masked_hash": masked, "created_at": row.created_at})
+    return result
     )
 
 
