@@ -529,49 +529,41 @@ function ApplicationsView({
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 <tr>
-                  <th className="px-4 py-3">应用</th>
+                  <th className="px-5 py-3">应用</th>
                   <th className="px-4 py-3">用户池</th>
                   <th className="px-4 py-3">SSO</th>
-                  <th className="px-4 py-3">状态</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {applications.map((app) => (
                   <tr key={app.id} className="bg-white hover:bg-slate-50">
-                    <td className="px-4 py-4 align-middle">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-light text-brand">
-                          <Globe size={16} />
-                        </div>
+                    <td className="px-5 py-5 align-middle">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-900">{app.name}</span>
-                            {app.description && (
-                              <span className="truncate text-xs text-slate-500 max-w-48">· {app.description}</span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex items-center gap-1">
-                            <code className="text-xs text-muted font-mono">{app.client_id}</code>
+                          <div className="font-semibold text-slate-900">{app.name}</div>
+                          {app.description && (
+                            <div className="mt-1 text-xs text-slate-500">{app.description}</div>
+                          )}
+                          <div className="mt-1.5 flex items-center gap-1">
+                            <code className="text-xs font-mono text-slate-400">{app.client_id}</code>
                             <CopyButton text={app.client_id} size={12} />
                           </div>
                         </div>
+                        <StatusBadge status={app.status} />
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-500 align-middle">
+                    <td className="px-4 py-5 text-slate-500 align-middle">
                       <span className="text-xs">{app.enable_public_users ? "公共" : "私有"}</span>
                     </td>
-                    <td className="px-4 py-4 text-slate-500 align-middle">
+                    <td className="px-4 py-5 text-slate-500 align-middle">
                       <span className="text-xs">{app.enable_sso ? "开启" : "关闭"}</span>
                     </td>
-                    <td className="px-4 py-4 align-middle">
-                      <StatusBadge status={app.status} />
-                    </td>
-                    <td className="px-4 py-4 align-middle">
+                    <td className="px-4 py-5 align-middle">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => openEdit(app)}
-                          className="rounded-md px-2.5 py-1 text-xs text-muted hover:bg-slate-100 hover:text-gray-700 transition-colors"
+                          className="rounded-md px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-gray-700 transition-colors"
                         >
                           编辑
                         </button>
@@ -646,8 +638,8 @@ function UsersView({
   return (
     <Card>
       <SectionHeader title="全局用户" description="管理 Passport 注册用户状态" />
-      <div className="relative mb-4">
-        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+      <div className="relative mx-5 mb-4">
+        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           className={cn(inputCls, "max-w-xs pl-9")}
           value={search}
@@ -658,7 +650,7 @@ function UsersView({
       {filtered.length === 0 ? (
         <EmptyBlock text="暂无用户" />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto px-5">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
               <tr>
@@ -671,12 +663,12 @@ function UsersView({
             <tbody className="divide-y divide-slate-200">
               {filtered.map((user) => (
                 <tr key={user.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-4 font-medium text-slate-900">{user.email}</td>
-                  <td className="px-4 py-4 text-slate-500">{user.display_name ?? "-"}</td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-5 font-medium text-slate-900">{user.email}</td>
+                  <td className="px-4 py-5 text-slate-500">{user.display_name ?? "-"}</td>
+                  <td className="px-4 py-5">
                     <StatusBadge status={user.status} />
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-5">
                     <button
                       onClick={() => onToggleStatus(user.id, user.status)}
                       className={cn(
@@ -1239,11 +1231,11 @@ function PermissionsView({
             <tbody className="divide-y divide-slate-200">
               {perms.map((p) => (
                 <tr key={p.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-4 font-medium text-slate-900">{p.name}</td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-5 font-medium text-slate-900">{p.name}</td>
+                  <td className="px-4 py-5">
                     <code className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500">{p.code}</code>
                   </td>
-                  <td className="px-4 py-4 text-slate-500">{p.description ?? "-"}</td>
+                  <td className="px-4 py-5 text-slate-500">{p.description ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1386,7 +1378,7 @@ function AppUsersView({
             <tbody className="divide-y divide-slate-200">
               {members.map((m) => (
                 <tr key={m.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-4 py-5 align-middle">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand text-xs font-semibold">
                         {(m.user_display_name ?? m.user_email ?? "?")[0].toUpperCase()}
@@ -1397,9 +1389,9 @@ function AppUsersView({
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-slate-500 align-middle">{m.user_email}</td>
-                  <td className="px-4 py-4 align-middle"><StatusBadge status={m.status} /></td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-4 py-5 text-slate-500 align-middle">{m.user_email}</td>
+                  <td className="px-4 py-5 align-middle"><StatusBadge status={m.status} /></td>
+                  <td className="px-4 py-5 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.roles.length > 0
                         ? m.roles.map((r) => (
@@ -1408,7 +1400,7 @@ function AppUsersView({
                         : <span className="text-xs text-slate-400">-</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-4 py-5 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.permissions.length > 0
                         ? m.permissions.slice(0, 3).map((p) => (
@@ -1420,7 +1412,7 @@ function AppUsersView({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-middle">
+                  <td className="px-4 py-5 align-middle">
                     <button
                       onClick={() => toggleStatus(m.user_id, m.status)}
                       className={cn(
