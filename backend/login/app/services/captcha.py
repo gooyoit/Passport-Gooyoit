@@ -2,7 +2,7 @@
 
 import base64
 import io
-import random
+import secrets
 import string
 import time
 import uuid
@@ -18,7 +18,7 @@ _captcha_store: dict[str, tuple[str, float]] = {}
 
 
 def generate_captcha(redis_client: Redis | None) -> dict:
-    text = "".join(random.choices(CAPTCHA_CHARS, k=settings.captcha_length))
+    text = "".join(secrets.choice(CAPTCHA_CHARS) for _ in range(settings.captcha_length))
     img = captcha.image.ImageCaptcha()
     buf = io.BytesIO()
     img.write(text, buf)
@@ -33,7 +33,7 @@ def generate_captcha(redis_client: Redis | None) -> dict:
 
     result: dict = {"captcha_key": key, "captcha_image": f"data:image/png;base64,{b64}"}
     if settings.debug:
-        result["captcha_answer"] = text
+        result["captcha_answer"] = text.lower()
     return result
 
 

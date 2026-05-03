@@ -1,6 +1,7 @@
 """Authentication API."""
 
 import structlog
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -114,8 +115,7 @@ def email_login(
 
     return EmailLoginResponse(
         code=auth_code.code,
-        redirect_uri=f"{payload.redirect_uri}?code={auth_code.code}"
-        + (f"&state={payload.state}" if payload.state else ""),
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
         state=payload.state,
     )
 
@@ -163,8 +163,7 @@ def email_password_login(
     logger.info("password_login_success", email=payload.email)
     return EmailLoginResponse(
         code=auth_code.code,
-        redirect_uri=f"{payload.redirect_uri}?code={auth_code.code}"
-        + (f"&state={payload.state}" if payload.state else ""),
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
         state=payload.state,
     )
 
@@ -177,6 +176,19 @@ def email_register(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Register a new user and return an authorization code."""
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+
+    try:
+        check_request_code_rate_limit(redis_client, str(payload.email), client_ip)
+    except RateLimitExceeded as e:
+        logger.warning("register_rate_limited", email=payload.email, client_ip=client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
+
     try:
         auth_code = complete_email_register(
             db,
@@ -197,7 +209,6 @@ def email_register(
     logger.info("register_success", email=payload.email, client_id=payload.client_id)
     return EmailLoginResponse(
         code=auth_code.code,
-        redirect_uri=f"{payload.redirect_uri}?code={auth_code.code}"
-        + (f"&state={payload.state}" if payload.state else ""),
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
         state=payload.state,
     )

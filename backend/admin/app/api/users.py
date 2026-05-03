@@ -5,11 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user_id
+from app.deps import require_admin
 from app.models import User
 from app.schemas import UserRead, UserStatusUpdate
 
-router = APIRouter(tags=["users"], dependencies=[Depends(get_current_user_id)])
+router = APIRouter(tags=["users"], dependencies=[Depends(require_admin)])
 
 
 @router.get("/users", response_model=list[UserRead])

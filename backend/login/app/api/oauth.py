@@ -1,6 +1,7 @@
 """OAuth-style endpoints."""
 
 import structlog
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -98,10 +99,10 @@ def authorize(
                 redirect_uri=redirect_uri,
             )
             db.commit()
-            location = f"{redirect_uri}?code={auth_code.code}"
+            params = {"code": auth_code.code}
             if state:
-                location = f"{location}&state={state}"
-            return RedirectResponse(location)
+                params["state"] = state
+            return RedirectResponse(f"{redirect_uri}?{urlencode(params)}")
 
     methods = db.scalars(
         select(ApplicationLoginMethod).where(
@@ -200,9 +201,10 @@ async def oauth_provider_callback(
         redirect_uri=context["redirect_uri"],
     )
     db.commit()
-    location = f"{context['redirect_uri']}?code={auth_code.code}"
+    params = {"code": auth_code.code}
     if context.get("state"):
-        location = f"{location}&state={context['state']}"
+        params["state"] = context["state"]
+    location = f"{context['redirect_uri']}?{urlencode(params)}"
 
     response = RedirectResponse(location)
     if application.enable_sso:

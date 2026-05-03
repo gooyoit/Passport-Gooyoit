@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user_id
+from app.deps import get_current_user_id, require_admin, require_super_admin
 from app.models import (
     Application,
     ApplicationClientSecret,
@@ -30,7 +30,7 @@ from app.schemas import (
 )
 from app.services.applications import create_application
 
-router = APIRouter(tags=["applications"], dependencies=[Depends(get_current_user_id)])
+router = APIRouter(tags=["applications"], dependencies=[Depends(require_admin)])
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +50,7 @@ def list_applications(db: Session = Depends(get_db)) -> list[Application]:
 )
 def create_application_endpoint(
     payload: ApplicationCreate,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> ApplicationCreated:
     """Create a Passport application."""
@@ -119,6 +120,7 @@ def update_application(
 )
 def regenerate_secret(
     application_id: int,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Generate a new client secret (old secrets remain valid)."""
@@ -171,6 +173,7 @@ def list_secrets(
 def delete_secret(
     application_id: int,
     secret_id: int,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Delete a client secret."""
@@ -210,6 +213,7 @@ def list_login_methods(
 def upsert_login_method(
     application_id: int,
     payload: LoginMethodUpsert,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Enable or disable one login method for an application."""
@@ -261,9 +265,12 @@ def list_roles(
 def create_role(
     application_id: int,
     payload: RoleCreate,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> Role:
     """Create an application-local role."""
+    if payload.code == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot create super_admin role through this endpoint")
     if payload.is_default:
         existing_default = db.scalar(
             select(Role).where(

@@ -398,6 +398,7 @@ function ApplicationsView({
   onRegenerateSecret,
   onDeleteSecret,
   onSelect,
+  canCreate,
 }: {
   applications: Application[];
   onLoad: () => void;
@@ -406,6 +407,7 @@ function ApplicationsView({
   onRegenerateSecret: (appId: number, clientId: string) => void;
   onDeleteSecret: (appId: number, secretId: number) => void;
   onSelect: (app: Application) => void;
+  canCreate: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editingApp, setEditingApp] = useState<Application | null>(null);
@@ -498,11 +500,11 @@ function ApplicationsView({
       <Card>
         <SectionHeader
           title="应用列表"
-          action={
+          action={canCreate ? (
             <button onClick={() => { resetForm(); setOpen(true); }} className={btnPrimary}>
               <Plus size={16} /> 新建应用
             </button>
-          }
+          ) : undefined}
         />
         {applications.length === 0 ? (
           <EmptyBlock text="暂无应用，点击右上角创建" />
@@ -680,16 +682,18 @@ function AppDetailLayout({
   onTabChange,
   onBack,
   children,
+  showSecretsTab,
 }: {
   app: Application;
   activeTab: ViewKey;
   onTabChange: (key: ViewKey) => void;
   onBack: () => void;
   children: React.ReactNode;
+  showSecretsTab?: boolean;
 }) {
   const tabs: { key: ViewKey; label: string; icon: React.ElementType }[] = [
     { key: "login-methods", label: "登录方式", icon: Key },
-    { key: "secrets", label: "密钥管理", icon: Shield },
+    ...(showSecretsTab ? [{ key: "secrets" as ViewKey, label: "密钥管理", icon: Shield }] : []),
     { key: "roles", label: "角色", icon: Shield },
     { key: "permissions", label: "权限", icon: Key },
     { key: "app-users", label: "应用用户", icon: Users },
@@ -1264,7 +1268,7 @@ function PermissionsView({
         <Field label="选择角色">
           <select className={inputCls} value={selRole} onChange={(e) => setSelRole(e.target.value)}>
             <option value="">请选择…</option>
-            {roles.map((r) => (
+            {roles.filter((r) => r.code !== "super_admin").map((r) => (
               <option key={r.id} value={r.id}>{r.name} ({r.code})</option>
             ))}
           </select>
@@ -1440,7 +1444,7 @@ function AppUsersView({
         <Field label="选择角色">
           <select className={inputCls} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
             <option value="">请选择…</option>
-            {roles.map((r) => (
+            {roles.filter((r) => r.code !== "super_admin").map((r) => (
               <option key={r.id} value={r.id}>{r.name} ({r.code})</option>
             ))}
           </select>
@@ -1455,6 +1459,15 @@ function AppUsersView({
 export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem("accessToken"));
   const [_refreshToken, setRefreshToken] = useState<string | null>(localStorage.getItem("refreshToken"));
+  const [userRoles, setUserRoles] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem("userRoles");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const isSuperAdmin = userRoles.includes("super_admin");
 
   const [userEmail, setUserEmail] = useState<string | null>(localStorage.getItem("userEmail"));
   const [authChecked, setAuthChecked] = useState(false);
@@ -1480,6 +1493,8 @@ export default function App() {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("userEmail");
+    localStorage.removeItem("userRoles");
+    setUserRoles([]);
     const redirectUri = window.location.origin + window.location.pathname;
     window.location.href = buildAuthorizeUrl(redirectUri);
   }, []);
@@ -1524,6 +1539,8 @@ export default function App() {
           localStorage.setItem("accessToken", data.access_token);
           localStorage.setItem("refreshToken", data.refresh_token);
           localStorage.setItem("userEmail", data.user.email);
+          localStorage.setItem("userRoles", JSON.stringify(data.roles));
+          setUserRoles(data.roles);
           setAuthenticated(true);
           setAuthChecked(true);
           load(data.access_token);
@@ -1738,18 +1755,19 @@ export default function App() {
               onRegenerateSecret={regenerateSecret}
               onDeleteSecret={deleteSecret}
               onSelect={openAppDetail}
+              canCreate={isSuperAdmin}
             />
           )}
           {view === "users" && (
             <UsersView users={users} onToggleStatus={toggleUserStatus} />
           )}
           {selectedApp && view === "login-methods" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
               <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
             </AppDetailLayout>
           )}
           {selectedApp && view === "secrets" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
               <SecretsView
                 appId={selectedApp.id}
                 token={accessToken ?? ""}
@@ -1760,17 +1778,17 @@ export default function App() {
             </AppDetailLayout>
           )}
           {selectedApp && view === "roles" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
               <RolesView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
             </AppDetailLayout>
           )}
           {selectedApp && view === "permissions" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
               <PermissionsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
             </AppDetailLayout>
           )}
           {selectedApp && view === "app-users" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
               <AppUsersView appId={selectedApp.id} token={accessToken ?? ""} />
             </AppDetailLayout>
           )}

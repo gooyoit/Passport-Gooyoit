@@ -5,13 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user_id
+from app.deps import require_admin, require_super_admin
 from app.models import ApplicationUser, Role, User, UserRole
 from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate
 from app.services.permissions import get_effective_permissions, get_effective_roles
 
 router = APIRouter(
-    tags=["app-detail"], dependencies=[Depends(get_current_user_id)]
+    tags=["app-detail"], dependencies=[Depends(require_admin)]
 )
 
 
@@ -100,6 +100,7 @@ def assign_role_to_user(
     application_id: int,
     user_id: int,
     role_id: int,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Assign an explicit role to a user."""
@@ -108,6 +109,8 @@ def assign_role_to_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
         )
+    if role.code == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot assign super_admin role through this endpoint")
 
     existing = db.scalar(
         select(UserRole).where(

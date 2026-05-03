@@ -450,7 +450,7 @@ def exchange_authorization_code(
             OAuthAuthorizationCode.code == code,
             OAuthAuthorizationCode.application_id == application.id,
             OAuthAuthorizationCode.redirect_uri == redirect_uri,
-        )
+        ).with_for_update()
     )
     if auth_code is None or auth_code.used_at is not None or auth_code.expires_at <= now:
         raise HTTPException(
