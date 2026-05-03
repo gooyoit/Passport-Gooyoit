@@ -17,6 +17,7 @@ from app.schemas import (
     ApplicationCreate,
     ApplicationCreated,
     ApplicationRead,
+    ApplicationUpdate,
     LoginMethodRead,
     LoginMethodUpsert,
     PermissionCreate,
@@ -72,6 +73,33 @@ def get_application(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
         )
+    return application
+
+
+@router.patch("/applications/{application_id}", response_model=ApplicationRead)
+def update_application(
+    application_id: int,
+    payload: ApplicationUpdate,
+    db: Session = Depends(get_db),
+) -> Application:
+    """Update an application's settings."""
+    application = db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
+        )
+    if payload.name is not None:
+        application.name = payload.name
+    if payload.description is not None:
+        application.description = payload.description
+    if payload.redirect_uris is not None:
+        application.redirect_uris = [str(uri) for uri in payload.redirect_uris]
+    if payload.enable_public_users is not None:
+        application.enable_public_users = payload.enable_public_users
+    if payload.enable_sso is not None:
+        application.enable_sso = payload.enable_sso
+    db.commit()
+    db.refresh(application)
     return application
 
 

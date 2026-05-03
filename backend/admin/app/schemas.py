@@ -39,6 +39,16 @@ class ApplicationCreated(ApplicationRead):
     client_secret: str
 
 
+class ApplicationUpdate(BaseModel):
+    """Update an application."""
+
+    name: str | None = None
+    description: str | None = None
+    redirect_uris: list[HttpUrl] | None = None
+    enable_public_users: bool | None = None
+    enable_sso: bool | None = None
+
+
 # ---------------------------------------------------------------------------
 # Login methods
 # ---------------------------------------------------------------------------

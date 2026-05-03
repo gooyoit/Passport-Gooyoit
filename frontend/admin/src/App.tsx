@@ -319,25 +319,90 @@ function ApplicationsView({
   applications,
   onLoad,
   onCreate,
+  onUpdate,
   onSelect,
 }: {
   applications: Application[];
   onLoad: () => void;
-  onCreate: (name: string, redirectUris: string[]) => void;
+  onCreate: (name: string, redirectUris: string[], enableSSO: boolean, enablePublicUsers: boolean, description?: string) => void;
+  onUpdate: (id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) => void;
   onSelect: (app: Application) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [editingApp, setEditingApp] = useState<Application | null>(null);
   const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
   const [uris, setUris] = useState("");
+  const [enableSSO, setEnableSSO] = useState(true);
+  const [enablePublicUsers, setEnablePublicUsers] = useState(false);
+
+  function resetForm() {
+    setName("");
+    setDesc("");
+    setUris("");
+    setEnableSSO(true);
+    setEnablePublicUsers(false);
+  }
+
+  function openEdit(app: Application) {
+    setEditingApp(app);
+    setName(app.name);
+    setDesc(app.description ?? "");
+    setUris(app.redirect_uris.join("\n"));
+    setEnableSSO(app.enable_sso);
+    setEnablePublicUsers(app.enable_public_users);
+  }
 
   function handleCreate() {
     if (!name.trim()) return;
-    onCreate(name.trim(), uris.split("\n").map((s) => s.trim()).filter(Boolean));
-    setName("");
-    setUris("");
+    onCreate(name.trim(), uris.split("\n").map((s) => s.trim()).filter(Boolean), enableSSO, enablePublicUsers, desc.trim() || undefined as string | undefined);
+    resetForm();
     setOpen(false);
     onLoad();
   }
+
+  function handleUpdate() {
+    if (!editingApp || !name.trim()) return;
+    onUpdate(editingApp.id, {
+      name: name.trim(),
+      description: desc.trim() || null,
+      redirect_uris: uris.split("\n").map((s) => s.trim()).filter(Boolean),
+      enable_sso: enableSSO,
+      enable_public_users: enablePublicUsers,
+    });
+    setEditingApp(null);
+    resetForm();
+    onLoad();
+  }
+
+  const formFields = (
+    <>
+      <Field label="应用名称">
+        <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="例：MyApp" />
+      </Field>
+      <Field label="应用描述">
+        <input className={inputCls} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="可选" />
+      </Field>
+      <Field label="回调地址（每行一个）">
+        <textarea
+          className={cn(inputCls, "min-h-20 resize-y")}
+          value={uris}
+          onChange={(e) => setUris(e.target.value)}
+          placeholder="https://example.com/callback"
+        />
+      </Field>
+      <div className="flex items-center gap-6">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={enableSSO} onChange={(e) => setEnableSSO(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand" />
+          启用 SSO 单点登录
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={enablePublicUsers} onChange={(e) => setEnablePublicUsers(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand" />
+          允许公开注册
+        </label>
+      </div>
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -345,7 +410,7 @@ function ApplicationsView({
         <SectionHeader
           title="应用列表"
           action={
-            <button onClick={() => setOpen(true)} className={btnPrimary}>
+            <button onClick={() => { resetForm(); setOpen(true); }} className={btnPrimary}>
               <Plus size={16} /> 新建应用
             </button>
           }
@@ -358,6 +423,7 @@ function ApplicationsView({
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="px-4 py-2 font-medium">名称</th>
+                  <th className="px-4 py-2 font-medium">描述</th>
                   <th className="px-4 py-2 font-medium">Client ID</th>
                   <th className="px-4 py-2 font-medium">用户池</th>
                   <th className="px-4 py-2 font-medium">SSO</th>
@@ -369,6 +435,7 @@ function ApplicationsView({
                 {applications.map((app) => (
                   <tr key={app.id} className="hover:bg-surface">
                     <td className="px-4 py-3 font-medium">{app.name}</td>
+                    <td className="px-4 py-3 text-xs text-muted max-w-48 truncate">{app.description ?? "-"}</td>
                     <td className="px-4 py-3">
                       <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-muted">
                         {app.client_id}
@@ -384,12 +451,20 @@ function ApplicationsView({
                       <StatusBadge status={app.status} />
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => onSelect(app)}
-                        className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light"
-                      >
-                        管理
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(app)}
+                          className="rounded-md px-2.5 py-1 text-xs text-muted hover:bg-surface hover:text-gray-700"
+                        >
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => onSelect(app)}
+                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light"
+                        >
+                          管理
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -405,26 +480,26 @@ function ApplicationsView({
         title="新建应用"
         actions={
           <>
-            <button onClick={() => setOpen(false)} className={btnOutline}>
-              取消
-            </button>
-            <button onClick={handleCreate} className={btnPrimary}>
-              创建
-            </button>
+            <button onClick={() => setOpen(false)} className={btnOutline}>取消</button>
+            <button onClick={handleCreate} className={btnPrimary}>创建</button>
           </>
         }
       >
-        <Field label="应用名称">
-          <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="例：MyApp" />
-        </Field>
-        <Field label="回调地址（每行一个）">
-          <textarea
-            className={cn(inputCls, "min-h-20 resize-y")}
-            value={uris}
-            onChange={(e) => setUris(e.target.value)}
-            placeholder="https://example.com/callback"
-          />
-        </Field>
+        {formFields}
+      </Modal>
+
+      <Modal
+        open={editingApp !== null}
+        onClose={() => { setEditingApp(null); resetForm(); }}
+        title="编辑应用"
+        actions={
+          <>
+            <button onClick={() => { setEditingApp(null); resetForm(); }} className={btnOutline}>取消</button>
+            <button onClick={handleUpdate} className={btnPrimary}>保存</button>
+          </>
+        }
+      >
+        {formFields}
       </Modal>
     </div>
   );
@@ -1303,17 +1378,30 @@ export default function App() {
     setView("applications");
   }
 
-  async function createApplication(name: string, redirectUris: string[]) {
+  async function createApplication(name: string, redirectUris: string[], enableSSO: boolean, enablePublicUsers: boolean, description?: string) {
     const created = await request<ApplicationCreated>("/applications", accessToken, {
       method: "POST",
       body: JSON.stringify({
         name,
+        description: description || null,
         redirect_uris: redirectUris.length > 0 ? redirectUris : [],
-        enable_public_users: true,
-        enable_sso: true,
+        enable_public_users: enablePublicUsers,
+        enable_sso: enableSSO,
       }),
     });
     toast(`应用「${name}」创建成功！Client Secret: ${created.client_secret}`, "success");
+  }
+
+  async function updateApplication(id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) {
+    await request(`/applications/${id}`, accessToken, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    toast("应用已更新", "success");
+    const app = applications.find((a) => a.id === id);
+    if (app && app === selectedApp) {
+      setSelectedApp({ ...app, ...data, description: data.description ?? null });
+    }
   }
 
   async function toggleUserStatus(userId: number, currentStatus: string) {
@@ -1444,7 +1532,8 @@ export default function App() {
             <ApplicationsView
               applications={applications}
               onLoad={load}
-              onCreate={(name, uris) => createApplication(name, uris).catch((e) => toast(e.message))}
+              onCreate={(name, uris, sso, pub, desc) => createApplication(name, uris, sso, pub, desc).catch((e) => toast(e.message))}
+              onUpdate={updateApplication}
               onSelect={openAppDetail}
             />
           )}
