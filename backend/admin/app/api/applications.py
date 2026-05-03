@@ -164,7 +164,11 @@ def list_secrets(
     result = []
     for row in rows:
         h = row.secret_hash
-        masked = h[:8] + "•" * 16 + h[-4:] if len(h) > 12 else "•" * len(h)
+        if h.startswith("sha256:"):
+            body = h[7:]
+            masked = "sha256:" + body[:12] + "•" * 12 + body[-4:] if len(body) > 16 else h
+        else:
+            masked = h[:8] + "•" * 16 + h[-4:] if len(h) > 12 else "•" * len(h)
         result.append({"id": row.id, "masked_hash": masked, "created_at": row.created_at})
     return result
 
