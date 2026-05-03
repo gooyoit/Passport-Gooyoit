@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_secret, random_token
-from app.models import Application, ApplicationLoginMethod, Role
+from app.models import Application, ApplicationClientSecret, ApplicationLoginMethod, Role
 
 
 def create_application(
@@ -22,7 +22,6 @@ def create_application(
     client_secret = random_token(32)
     application = Application(
         client_id=client_id,
-        client_secret_hash=hash_secret(client_secret),
         name=name,
         description=description,
         redirect_uris=redirect_uris,
@@ -34,6 +33,11 @@ def create_application(
     )
     db.add(application)
     db.flush()
+
+    db.add(ApplicationClientSecret(
+        application_id=application.id,
+        secret_hash=hash_secret(client_secret),
+    ))
 
     default_role = Role(
         application_id=application.id,

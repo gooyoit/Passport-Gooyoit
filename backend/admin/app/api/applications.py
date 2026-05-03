@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.deps import get_current_user_id
 from app.models import (
     Application,
+    ApplicationClientSecret,
     ApplicationLoginMethod,
     Permission,
     Role,
@@ -18,6 +19,8 @@ from app.schemas import (
     ApplicationCreated,
     ApplicationRead,
     ApplicationUpdate,
+    ClientSecretItem,
+    ClientSecretResponse,
     LoginMethodRead,
     LoginMethodUpsert,
     PermissionCreate,
@@ -101,6 +104,80 @@ def update_application(
     db.commit()
     db.refresh(application)
     return application
+
+
+# ---------------------------------------------------------------------------
+# Client secrets
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/applications/{application_id}/regenerate-secret",
+    response_model=ClientSecretResponse,
+)
+def regenerate_secret(
+    application_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Generate a new client secret (old secrets remain valid)."""
+    from app.services.applications import _hash_secret
+
+    import secrets
+
+    application = db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
+        )
+    new_secret = secrets.token_urlsafe(32)
+    db.add(
+        ApplicationClientSecret(
+            application_id=application.id,
+            secret_hash=_hash_secret(new_secret),
+        )
+    )
+    db.commit()
+    return {"client_secret": new_secret}
+
+
+@router.get(
+    "/applications/{application_id}/secrets",
+    response_model=list[ClientSecretItem],
+)
+def list_secrets(
+    application_id: int,
+    db: Session = Depends(get_db),
+) -> list[ApplicationClientSecret]:
+    """List client secrets for an application (no plaintext)."""
+    application = db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
+        )
+    return list(
+        db.scalars(
+            select(ApplicationClientSecret)
+            .where(ApplicationClientSecret.application_id == application_id)
+            .order_by(ApplicationClientSecret.id.desc())
+        ).all()
+    )
+
+
+@router.delete("/applications/{application_id}/secrets/{secret_id}")
+def delete_secret(
+    application_id: int,
+    secret_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Delete a client secret."""
+    secret = db.get(ApplicationClientSecret, secret_id)
+    if secret is None or secret.application_id != application_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found"
+        )
+    db.delete(secret)
+    db.commit()
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

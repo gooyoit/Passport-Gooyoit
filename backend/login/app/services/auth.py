@@ -19,6 +19,7 @@ from app.core.security import (
 )
 from app.models import (
     Application,
+    ApplicationClientSecret,
     ApplicationUser,
     EmailVerificationCode,
     OAuthAuthorizationCode,
@@ -38,6 +39,16 @@ from app.services.sso import create_sso_session, revoke_sso_session
 logger = structlog.get_logger(__name__)
 
 SSO_COOKIE_NAME = "passport_sso"
+
+
+def verify_client_secret(db: Session, application: Application, client_secret: str) -> bool:
+    """Check if the client_secret matches any active secret for the application."""
+    secrets = db.scalars(
+        select(ApplicationClientSecret).where(
+            ApplicationClientSecret.application_id == application.id
+        )
+    ).all()
+    return any(verify_secret(client_secret, s.secret_hash) for s in secrets)
 
 
 def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = "login") -> str:
@@ -430,7 +441,7 @@ def exchange_authorization_code(
 ) -> tuple[str, str, int, User, list[str], list[str]]:
     """Exchange an authorization code for access and refresh tokens."""
     application = get_active_application_by_client_id(db, client_id)
-    if application is None or not verify_secret(client_secret, application.client_secret_hash):
+    if application is None or not verify_client_secret(db, application, client_secret):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid client")
 
     now = utcnow()
@@ -507,7 +518,7 @@ def refresh_access_token(
 ) -> tuple[str, int, User, list[str], list[str]]:
     """Refresh an access token using a valid refresh token."""
     application = get_active_application_by_client_id(db, client_id)
-    if application is None or not verify_secret(client_secret, application.client_secret_hash):
+    if application is None or not verify_client_secret(db, application, client_secret):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid client")
 
     now = utcnow()

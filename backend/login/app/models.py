@@ -67,7 +67,6 @@ class Application(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     client_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
-    client_secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     redirect_uris: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
@@ -77,6 +76,19 @@ class Application(TimestampMixin, Base):
     access_token_ttl_seconds: Mapped[int] = mapped_column(Integer, default=7200, nullable=False)
     refresh_token_ttl_seconds: Mapped[int] = mapped_column(Integer, default=2_592_000, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+
+
+class ApplicationClientSecret(Base):
+    """Client secret for an application (supports multiple active secrets)."""
+
+    __tablename__ = "application_client_secrets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class ApplicationLoginMethod(TimestampMixin, Base):

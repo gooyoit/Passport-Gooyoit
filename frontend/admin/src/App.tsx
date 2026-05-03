@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   CheckCircle,
   ChevronRight,
+  Copy,
+  Download,
   Globe,
   Info,
   Key,
@@ -19,6 +21,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -151,7 +154,74 @@ const btnCls =
 const btnPrimary = cn(btnCls, "bg-brand text-white hover:bg-brand-dark");
 const btnOutline = cn(btnCls, "border border-border bg-white hover:bg-surface");
 
-/* ─── Toast ─────────────────────────────────────────────────── */
+/* ─── CopyButton ──────────────────────────────────────── */
+
+function CopyButton({ text, size: sz = 14, className: cls }: { text: string; size?: number; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className={cn("rounded p-1 text-muted hover:text-gray-700 hover:bg-surface transition-colors", cls)}
+      title="复制"
+    >
+      {copied ? <CheckCircle size={sz} className="text-success" /> : <Copy size={sz} />}
+    </button>
+  );
+}
+
+/* ─── SecretModal ────────────────────────────────────── */
+
+function SecretModal({ clientId, clientSecret, onClose }: { clientId: string; clientSecret: string; onClose: () => void }) {
+  function download() {
+    const content = `Client ID:\n${clientId}\n\nClient Secret:\n${clientSecret}\n\n⚠ 请妥善保管 Client Secret，关闭此窗口后将无法再次查看完整内容。`;
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${clientId}_credentials.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-white p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-center gap-2">
+          <Shield size={20} className="text-brand" />
+          <h3 className="text-lg font-bold">保存应用密钥</h3>
+        </div>
+        <p className="mb-4 text-xs text-muted">Client Secret 仅显示一次，请立即复制或下载保存。</p>
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted">Client ID</p>
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+              <code className="flex-1 truncate text-sm font-mono">{clientId}</code>
+              <CopyButton text={clientId} />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted">Client Secret</p>
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+              <code className="flex-1 break-all text-sm font-mono">{clientSecret}</code>
+              <CopyButton text={clientSecret} />
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={download} className={cn(btnOutline, "flex-1 gap-1.5")}>
+            <Download size={14} /> 下载
+          </button>
+          <button onClick={onClose} className={cn(btnPrimary, "flex-1")}>我已保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Toast ──────────────────────────────────────────── */
 
 interface ToastItem {
   id: number;
@@ -326,6 +396,8 @@ function ApplicationsView({
   onLoad: () => void;
   onCreate: (name: string, redirectUris: string[], enableSSO: boolean, enablePublicUsers: boolean, description?: string) => void;
   onUpdate: (id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) => void;
+  onRegenerateSecret: (appId: number, clientId: string) => void;
+  onDeleteSecret: (appId: number, secretId: number) => void;
   onSelect: (app: Application) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -437,9 +509,10 @@ function ApplicationsView({
                     <td className="px-4 py-3 font-medium">{app.name}</td>
                     <td className="px-4 py-3 text-xs text-muted max-w-48 truncate">{app.description ?? "-"}</td>
                     <td className="px-4 py-3">
-                      <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-muted">
-                        {app.client_id}
-                      </code>
+                      <div className="flex items-center gap-1">
+                        <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-muted">{app.client_id}</code>
+                        <CopyButton text={app.client_id} size={12} />
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs">{app.enable_public_users ? "公共" : "私有"}</span>
@@ -496,6 +569,14 @@ function ApplicationsView({
           <>
             <button onClick={() => { setEditingApp(null); resetForm(); }} className={btnOutline}>取消</button>
             <button onClick={handleUpdate} className={btnPrimary}>保存</button>
+            {editingApp && (
+              <button
+                onClick={() => { onRegenerateSecret(editingApp.id, editingApp.client_id); setEditingApp(null); resetForm(); }}
+                className="rounded-lg px-3 py-2 text-xs font-medium text-danger hover:bg-danger-light"
+              >
+                重新生成密钥
+              </button>
+            )}
           </>
         }
       >
@@ -616,6 +697,13 @@ function AppDetailLayout({
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs">
                   <Link2 size={12} />
                   <code className="font-mono">{app.client_id}</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(app.client_id)}
+                    className="ml-1 rounded p-0.5 hover:bg-white/20 transition-colors"
+                    title="复制"
+                  >
+                    <Copy size={11} className="text-white/70" />
+                  </button>
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs">
                   <Users size={12} />
@@ -1277,6 +1365,7 @@ export default function App() {
   const [view, setView] = useState<ViewKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [secretModal, setSecretModal] = useState<{ clientId: string; clientSecret: string } | null>(null);
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -1389,7 +1478,8 @@ export default function App() {
         enable_sso: enableSSO,
       }),
     });
-    toast(`应用「${name}」创建成功！Client Secret: ${created.client_secret}`, "success");
+    setSecretModal({ clientId: created.client_id, clientSecret: created.client_secret });
+    toast(`应用「${name}」创建成功`, "success");
   }
 
   async function updateApplication(id: number, data: { name?: string; description?: string | null; redirect_uris?: string[]; enable_sso?: boolean; enable_public_users?: boolean }) {
@@ -1403,6 +1493,16 @@ export default function App() {
     if (app && app === selectedApp) {
       setSelectedApp(app);
     }
+  }
+
+  async function regenerateSecret(appId: number, clientId: string) {
+    const data = await request<{ client_secret: string }>(`/applications/${appId}/regenerate-secret`, accessToken, { method: "POST" });
+    setSecretModal({ clientId, clientSecret: data.client_secret });
+  }
+
+  async function deleteSecret(appId: number, secretId: number) {
+    await request(`/applications/${appId}/secrets/${secretId}`, accessToken, { method: "DELETE" });
+    toast("密钥已删除", "success");
   }
 
   async function toggleUserStatus(userId: number, currentStatus: string) {
@@ -1535,6 +1635,8 @@ export default function App() {
               onLoad={load}
               onCreate={(name, uris, sso, pub, desc) => createApplication(name, uris, sso, pub, desc).catch((e) => toast(e.message))}
               onUpdate={updateApplication}
+              onRegenerateSecret={regenerateSecret}
+              onDeleteSecret={deleteSecret}
               onSelect={openAppDetail}
             />
           )}
@@ -1565,6 +1667,7 @@ export default function App() {
       </div>
 
       <ToastContainer items={toasts} />
+      {secretModal && <SecretModal clientId={secretModal.clientId} clientSecret={secretModal.clientSecret} onClose={() => setSecretModal(null)} />}
     </div>
   );
 }

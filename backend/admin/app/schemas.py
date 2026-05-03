@@ -1,5 +1,7 @@
 """Pydantic schemas for API requests and responses."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
 
@@ -47,6 +49,19 @@ class ApplicationUpdate(BaseModel):
     redirect_uris: list[HttpUrl] | None = None
     enable_public_users: bool | None = None
     enable_sso: bool | None = None
+
+
+class ClientSecretResponse(BaseModel):
+    """Newly generated client secret."""
+
+    client_secret: str
+
+
+class ClientSecretItem(BaseModel):
+    """An existing client secret (no plaintext)."""
+
+    id: int
+    created_at: datetime
 
 
 # ---------------------------------------------------------------------------
