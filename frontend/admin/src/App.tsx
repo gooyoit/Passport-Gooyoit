@@ -349,14 +349,17 @@ function DashboardView({
                 className="group cursor-pointer rounded-xl border border-border p-4 transition-all hover:border-brand/40 hover:shadow-sm"
                 onClick={() => onSelectApp(app)}
               >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-light text-brand">
-                  <Globe size={20} />
-                </div>
-                <p className="truncate text-sm font-semibold">{app.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">{app.client_id}</p>
-                <div className="mt-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe size={14} className="shrink-0 text-brand" />
+                    <p className="truncate text-sm font-semibold">{app.name}</p>
+                  </div>
                   <StatusBadge status={app.status} />
                 </div>
+                {app.description && (
+                  <p className="mt-1.5 line-clamp-2 text-xs text-muted leading-relaxed">{app.description}</p>
+                )}
+                <p className="mt-1.5 truncate text-xs text-muted">{app.client_id}</p>
               </div>
             ))}
           </div>
