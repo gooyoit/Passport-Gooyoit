@@ -51,6 +51,16 @@ class EmailRegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class EmailPasswordLoginRequest(BaseModel):
+    """Login with email and password."""
+
+    client_id: str
+    redirect_uri: HttpUrl
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+    state: str | None = None
+
+
 class EmailLoginResponse(BaseModel):
     """Login completion response."""
 

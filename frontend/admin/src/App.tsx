@@ -1155,6 +1155,8 @@ export default function App() {
           localStorage.setItem("refreshToken", data.refresh_token);
           localStorage.setItem("userEmail", data.user.email);
           setAuthenticated(true);
+          setAuthChecked(true);
+          load();
         })
         .catch((err) => {
           toast((err as Error).message);

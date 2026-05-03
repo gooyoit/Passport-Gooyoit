@@ -1,5 +1,7 @@
 """OAuth-style endpoints."""
 
+import structlog
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -37,6 +39,8 @@ from app.services.oauth_providers import (
 )
 from app.services.permissions import get_effective_permissions, get_effective_roles
 from app.services.sso import create_sso_session, resolve_sso_user_id
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -202,6 +206,7 @@ def token(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """Exchange an authorization code for tokens."""
+    logger.info("token_exchange_attempt", client_id=payload.client_id)
     access_token, refresh_token, expires_in, user, roles, permissions = exchange_authorization_code(
         db,
         client_id=payload.client_id,
@@ -230,6 +235,7 @@ def refresh_token(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """Refresh an access token using a valid refresh token."""
+    logger.info("token_refresh_attempt", client_id=payload.client_id)
     access_token, expires_in, user, roles, permissions = refresh_access_token(
         db,
         client_id=payload.client_id,

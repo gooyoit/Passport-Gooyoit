@@ -129,6 +129,62 @@ def complete_email_login(
     return auth_code
 
 
+def complete_password_login(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    email: str,
+    password: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify email + password and create an authorization code."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not validate_redirect_uri(application, redirect_uri):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
+    if not is_login_method_enabled(db, application.id, "email_password"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password login is disabled",
+        )
+
+    normalized_email = email.lower()
+    user = db.scalar(select(User).where(User.email == normalized_email))
+    if user is None or not user.hashed_password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if not verify_secret(password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
+    logger.info("password_login_success", email=normalized_email, user_id=user.id)
+    now = utcnow()
+    membership = ensure_application_user(db, application=application, user=user)
+    membership.last_login_at = now
+
+    if application.enable_sso:
+        sso_token = create_sso_session(db, user_id=user.id)
+        response.set_cookie(
+            SSO_COOKIE_NAME,
+            sso_token,
+            max_age=settings.sso_session_ttl_seconds,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite="lax",
+        )
+
+    auth_code = create_authorization_code(
+        db,
+        application=application,
+        user=user,
+        redirect_uri=redirect_uri,
+    )
+    db.commit()
+    db.refresh(auth_code)
+    return auth_code
+
+
 def complete_email_register(
     db: Session,
     response: Response,
@@ -157,6 +213,15 @@ def complete_email_register(
     normalized_email = email.lower()
     existing = db.scalar(select(User).where(User.email == normalized_email))
     if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    existing_identity = db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == "email",
+            UserIdentity.provider_user_id == normalized_email,
+        )
+    )
+    if existing_identity is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     now = utcnow()

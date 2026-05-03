@@ -2,50 +2,40 @@
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import jwt
+import httpx
 
 from app.config import settings
 
 _bearer_scheme = HTTPBearer()
 
 
-def get_current_user_id(
+async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ) -> int:
-    """Decode the Bearer JWT and return the user_id from the ``sub`` claim.
-
-    Raises 401 if the token is missing, invalid, or the ``sub`` claim is
-    not an integer user id.
-    """
-    token = credentials.credentials
+    """Validate the Bearer token via Passport /oauth/userinfo and return user_id."""
     try:
-        payload = jwt.decode(
-            token,
-            settings.secret_key,
-            algorithms=["HS256"],
-            issuer=settings.jwt_issuer,
-        )
-    except jwt.ExpiredSignatureError:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{settings.passport_api_url}/oauth/userinfo",
+                headers={"Authorization": f"Bearer {credentials.credentials}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPStatusError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
+            detail="Invalid or expired token",
         )
-    except jwt.InvalidTokenError:
+    except httpx.RequestError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Passport service unavailable",
         )
 
-    sub: str | int | None = payload.get("sub")
-    if sub is None:
+    user = data.get("user")
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing sub claim",
+            detail="Token missing user info",
         )
-    try:
-        return int(sub)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token sub claim is not a valid user id",
-        )
+    return int(user["id"])

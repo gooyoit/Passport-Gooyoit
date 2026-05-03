@@ -1,5 +1,7 @@
 """Token-exchange endpoint."""
 
+import httpx
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas import TokenExchangeRequest, TokenExchangeResponse
@@ -23,6 +25,11 @@ async def token_exchange(payload: TokenExchangeRequest) -> TokenExchangeResponse
             code=payload.code,
             redirect_uri=str(payload.redirect_uri),
         )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=f"Token exchange failed: {exc.response.text}",
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
