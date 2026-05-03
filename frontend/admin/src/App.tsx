@@ -1398,9 +1398,10 @@ export default function App() {
       body: JSON.stringify(data),
     });
     toast("应用已更新", "success");
+    await load();
     const app = applications.find((a) => a.id === id);
     if (app && app === selectedApp) {
-      setSelectedApp({ ...app, ...data, description: data.description ?? null });
+      setSelectedApp(app);
     }
   }
 
