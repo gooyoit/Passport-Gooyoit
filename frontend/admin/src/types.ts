@@ -78,7 +78,6 @@ export type ViewKey =
   | "dashboard"
   | "applications"
   | "users"
-  | "app-detail"
   | "login-methods"
   | "roles"
   | "permissions"

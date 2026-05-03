@@ -292,10 +292,12 @@ function DashboardView({
   applications,
   users,
   onNavigate,
+  onSelectApp,
 }: {
   applications: Application[];
   users: User[];
   onNavigate: (key: ViewKey) => void;
+  onSelectApp: (app: Application) => void;
 }) {
   const [appLayout, setAppLayout] = useState<"grid" | "list">("grid");
   const activeUsers = users.filter((u) => u.status === "active").length;
@@ -345,7 +347,7 @@ function DashboardView({
               <div
                 key={app.id}
                 className="group cursor-pointer rounded-xl border border-border p-4 transition-all hover:border-brand/40 hover:shadow-sm"
-                onClick={() => onNavigate("app-detail")}
+                onClick={() => onSelectApp(app)}
               >
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-light text-brand">
                   <Globe size={20} />
@@ -364,7 +366,7 @@ function DashboardView({
               <div
                 key={app.id}
                 className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface"
-                onClick={() => onNavigate("app-detail")}
+                onClick={() => onSelectApp(app)}
               >
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-light text-brand">
@@ -823,7 +825,7 @@ function SecretsView({
                 </p>
               </div>
               <button
-                onClick={() => onDelete(s.id)}
+                onClick={() => { if (window.confirm("确定删除该密钥？删除后使用该密钥的系统将无法完成 Token 交换。")) onDelete(s.id); }}
                 className="rounded-md px-2.5 py-1 text-xs text-red-500 hover:bg-red-50"
               >
                 删除
@@ -1712,7 +1714,7 @@ export default function App() {
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {view === "dashboard" && (
-            <DashboardView applications={applications} users={users} onNavigate={navigate} />
+            <DashboardView applications={applications} users={users} onNavigate={navigate} onSelectApp={openAppDetail} />
           )}
           {view === "applications" && (
             <ApplicationsView
