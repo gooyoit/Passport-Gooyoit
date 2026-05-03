@@ -8,7 +8,9 @@ import {
   Info,
   Key,
   LayoutDashboard,
+  LayoutGrid,
   Link2,
+  List,
   LogOut,
   Mail,
   Menu,
@@ -225,6 +227,7 @@ function DashboardView({
   users: User[];
   onNavigate: (key: ViewKey) => void;
 }) {
+  const [appLayout, setAppLayout] = useState<"grid" | "list">("grid");
   const activeUsers = users.filter((u) => u.status === "active").length;
   const activeApps = applications.filter((a) => a.status === "active").length;
   return (
@@ -237,19 +240,57 @@ function DashboardView({
       </div>
 
       <Card>
-        <SectionHeader
-          title="最近应用"
-          action={
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">最近应用</h3>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setAppLayout("grid")}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                appLayout === "grid" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
+              )}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setAppLayout("list")}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                appLayout === "list" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
+              )}
+            >
+              <List size={15} />
+            </button>
+            <span className="mx-1 h-4 w-px bg-border" />
             <button onClick={() => onNavigate("applications")} className={cn(btnOutline, "text-xs")}>
               查看全部
             </button>
-          }
-        />
+          </div>
+        </div>
         {applications.length === 0 ? (
           <EmptyBlock text="暂无应用" />
+        ) : appLayout === "grid" ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {applications.slice(0, 8).map((app) => (
+              <div
+                key={app.id}
+                className="group cursor-pointer rounded-xl border border-border p-4 transition-all hover:border-brand/40 hover:shadow-sm"
+                onClick={() => onNavigate("app-detail")}
+              >
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-light text-brand">
+                  <Globe size={20} />
+                </div>
+                <p className="truncate text-sm font-semibold">{app.name}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">{app.client_id}</p>
+                <div className="mt-2">
+                  <StatusBadge status={app.status} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="divide-y divide-border rounded-lg border border-border">
-            {applications.slice(0, 5).map((app) => (
+            {applications.slice(0, 8).map((app) => (
               <div
                 key={app.id}
                 className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface"
