@@ -42,7 +42,7 @@ import { cn, methodDescription, methodLabel } from "./lib/utils";
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]", className)}>
+    <section className={cn("rounded-3xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]", className)}>
       {children}
     </section>
   );
