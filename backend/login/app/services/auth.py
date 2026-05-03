@@ -36,7 +36,7 @@ from app.services.sso import create_sso_session, revoke_sso_session
 SSO_COOKIE_NAME = "passport_sso"
 
 
-def issue_email_code(db: Session, *, client_id: str, email: str) -> str:
+def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = "login") -> str:
     """Create an email verification code."""
     application = get_active_application_by_client_id(db, client_id)
     if application is None:
@@ -51,7 +51,7 @@ def issue_email_code(db: Session, *, client_id: str, email: str) -> str:
     verification = EmailVerificationCode(
         email=email.lower(),
         code_hash=hash_secret(code),
-        purpose="login",
+        purpose=purpose,
         expires_at=utcnow() + timedelta(seconds=settings.email_code_ttl_seconds),
     )
     db.add(verification)
@@ -98,6 +98,95 @@ def complete_email_login(
     verification.used_at = now
 
     user = get_or_create_email_user(db, email=email)
+    membership = ensure_application_user(db, application=application, user=user)
+    membership.last_login_at = now
+
+    if application.enable_sso:
+        sso_token = create_sso_session(db, user_id=user.id)
+        response.set_cookie(
+            SSO_COOKIE_NAME,
+            sso_token,
+            max_age=settings.sso_session_ttl_seconds,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite="lax",
+        )
+
+    auth_code = create_authorization_code(
+        db,
+        application=application,
+        user=user,
+        redirect_uri=redirect_uri,
+    )
+    db.commit()
+    db.refresh(auth_code)
+    return auth_code
+
+
+def complete_email_register(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    first_name: str,
+    last_name: str,
+    email: str,
+    code: str,
+    password: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify email code, create user with password, and issue authorization code."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not validate_redirect_uri(application, redirect_uri):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
+    if not is_login_method_enabled(db, application.id, "email_code"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email code login is disabled",
+        )
+
+    normalized_email = email.lower()
+    existing = db.scalar(select(User).where(User.email == normalized_email))
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    now = utcnow()
+    verification = db.scalar(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.email == normalized_email,
+            EmailVerificationCode.purpose == "register",
+            EmailVerificationCode.used_at.is_(None),
+            EmailVerificationCode.expires_at > now,
+        )
+        .order_by(EmailVerificationCode.created_at.desc())
+    )
+    if verification is None or not verify_secret(code, verification.code_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
+    verification.used_at = now
+
+    user = User(
+        email=normalized_email,
+        display_name=f"{first_name} {last_name}",
+        hashed_password=hash_secret(password),
+    )
+    db.add(user)
+    db.flush()
+
+    db.add(
+        UserIdentity(
+            user_id=user.id,
+            provider="email",
+            provider_user_id=normalized_email,
+            provider_email=normalized_email,
+            raw_profile={},
+        )
+    )
+    db.flush()
+
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 

@@ -452,7 +452,7 @@ function RegisterPage({
     try {
       await api<{ sent: boolean }>("/auth/email/request-code", {
         method: "POST",
-        body: JSON.stringify({ client_id: oauth.clientId, email: form.email, captcha_key: captchaKey, captcha_answer: captchaAnswer }),
+        body: JSON.stringify({ client_id: oauth.clientId, email: form.email, captcha_key: captchaKey, captcha_answer: captchaAnswer, purpose: "register" }),
       });
       setCodeSent(true);
       setMsg(t("register.codeSent"));

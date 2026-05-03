@@ -10,6 +10,7 @@ class EmailCodeRequest(BaseModel):
     email: EmailStr
     captcha_key: str
     captcha_answer: str = Field(min_length=1, max_length=10)
+    purpose: str = "login"
 
 
 class EmailCodeResponse(BaseModel):
@@ -35,6 +36,19 @@ class EmailLoginRequest(BaseModel):
     email: EmailStr
     code: str = Field(min_length=4, max_length=12)
     state: str | None = None
+
+
+class EmailRegisterRequest(BaseModel):
+    """Register a new user with email code."""
+
+    client_id: str
+    redirect_uri: HttpUrl
+    state: str | None = None
+    first_name: str = Field(min_length=1, max_length=64)
+    last_name: str = Field(min_length=1, max_length=64)
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class EmailLoginResponse(BaseModel):

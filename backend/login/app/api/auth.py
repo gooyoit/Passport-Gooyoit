@@ -12,8 +12,9 @@ from app.schemas import (
     EmailCodeResponse,
     EmailLoginRequest,
     EmailLoginResponse,
+    EmailRegisterRequest,
 )
-from app.services.auth import complete_email_login, issue_email_code
+from app.services.auth import complete_email_login, complete_email_register, issue_email_code
 from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
@@ -60,7 +61,7 @@ def request_email_code(
             detail="Invalid or expired captcha",
         )
 
-    code = issue_email_code(db, client_id=payload.client_id, email=str(payload.email))
+    code = issue_email_code(db, client_id=payload.client_id, email=str(payload.email), purpose=payload.purpose)
     return EmailCodeResponse(sent=True, debug_code=code if settings.debug else None)
 
 
@@ -101,6 +102,50 @@ def email_login(
 
     if redis_client:
         clear_failed_login(redis_client, str(payload.email), client_ip)
+
+    return EmailLoginResponse(
+        code=auth_code.code,
+        redirect_uri=f"{payload.redirect_uri}?code={auth_code.code}"
+        + (f"&state={payload.state}" if payload.state else ""),
+        state=payload.state,
+    )
+
+
+@router.post("/email/register", response_model=EmailLoginResponse)
+def email_register(
+    payload: EmailRegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> EmailLoginResponse:
+    """Register a new user and return an authorization code."""
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+
+    try:
+        check_request_code_rate_limit(redis_client, str(payload.email), client_ip)
+    except RateLimitExceeded as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
+
+    try:
+        auth_code = complete_email_register(
+            db,
+            response,
+            client_id=payload.client_id,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            email=str(payload.email),
+            code=payload.code,
+            password=payload.password,
+            redirect_uri=str(payload.redirect_uri),
+            state=payload.state,
+        )
+    except HTTPException:
+        raise
 
     return EmailLoginResponse(
         code=auth_code.code,
