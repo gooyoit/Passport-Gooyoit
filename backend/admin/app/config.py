@@ -14,9 +14,7 @@ class Settings(BaseSettings):
     app_name: str = "Gooyoit Passport Admin"
     debug: bool = False
     database_url: str
-    secret_key: str = Field(
-        default="dev-secret-change-me-with-32-bytes", min_length=32
-    )
+    secret_key: str = Field(min_length=32)
     jwt_issuer: str = "gooyoit-passport"
     passport_api_url: str = "http://127.0.0.1:8080"
     admin_client_id: str

@@ -8,7 +8,11 @@ from app.db.session import get_db
 from app.deps import require_admin, require_super_admin
 from app.models import ApplicationUser, Role, User, UserRole
 from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate
-from app.services.permissions import get_effective_permissions, get_effective_roles
+from app.services.permissions import (
+    get_effective_permissions,
+    get_effective_permissions_for_users,
+    get_effective_roles,
+)
 
 router = APIRouter(
     tags=["app-detail"], dependencies=[Depends(require_admin)]
@@ -34,6 +38,8 @@ def list_application_users(
         u.id: u
         for u in db.scalars(select(User).where(User.id.in_(user_ids))).all()
     }
+    perms_map = get_effective_permissions_for_users(db, application_id, user_ids)
+    roles_map = {uid: [role.code for role in get_effective_roles(db, application_id, uid)] for uid in user_ids}
     return [
         ApplicationUserRead(
             id=membership.id,
@@ -43,15 +49,8 @@ def list_application_users(
             user_display_name=users_by_id[membership.user_id].display_name,
             user_status=users_by_id[membership.user_id].status,
             status=membership.status,
-            roles=[
-                role.code
-                for role in get_effective_roles(db, membership.application_id, membership.user_id)
-            ],
-            permissions=get_effective_permissions(
-                db,
-                membership.application_id,
-                membership.user_id,
-            ),
+            roles=roles_map[membership.user_id],
+            permissions=perms_map.get(membership.user_id, []),
         )
         for membership in memberships
     ]
@@ -104,6 +103,14 @@ def assign_role_to_user(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Assign an explicit role to a user."""
+    membership = db.scalar(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application_id,
+            ApplicationUser.user_id == user_id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this application")
     role = db.get(Role, role_id)
     if role is None or role.application_id != application_id:
         raise HTTPException(

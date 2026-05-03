@@ -34,11 +34,14 @@ async def _verify_token(credentials: HTTPAuthorizationCredentials) -> dict:
         )
 
 
-async def get_current_user_id(
+async def _parse_token(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
-) -> int:
+) -> dict:
+    return await _verify_token(credentials)
+
+
+async def get_current_user_id(data: dict = Depends(_parse_token)) -> int:
     """Validate the Bearer token via Passport /oauth/userinfo and return user_id."""
-    data = await _verify_token(credentials)
     user = data.get("user")
     if user is None:
         raise HTTPException(
@@ -48,11 +51,8 @@ async def get_current_user_id(
     return int(user["id"])
 
 
-async def require_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
-) -> int:
+async def require_admin(data: dict = Depends(_parse_token)) -> int:
     """Require the user to have 'admin' or 'super_admin' role in the Admin application."""
-    data = await _verify_token(credentials)
     user = data.get("user")
     if user is None:
         raise HTTPException(
@@ -68,11 +68,8 @@ async def require_admin(
     return int(user["id"])
 
 
-async def require_super_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
-) -> int:
+async def require_super_admin(data: dict = Depends(_parse_token)) -> int:
     """Require the user to have 'super_admin' role in the Admin application."""
-    data = await _verify_token(credentials)
     user = data.get("user")
     if user is None:
         raise HTTPException(

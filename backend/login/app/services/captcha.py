@@ -14,6 +14,8 @@ from app.core.config import settings
 
 CAPTCHA_CHARS = string.digits + "ABCDEFGHJKLMNPQRSTUVWXYZ"
 
+MAX_MEMORY_CAPTCHA = 1000
+
 _captcha_store: dict[str, tuple[str, float]] = {}
 
 
@@ -29,7 +31,12 @@ def generate_captcha(redis_client: Redis | None) -> dict:
     if redis_client:
         redis_client.setex(f"captcha:{key}", settings.captcha_ttl_seconds, text.lower())
     else:
-        _captcha_store[key] = (text.lower(), time.time() + settings.captcha_ttl_seconds)
+        now = time.time()
+        _captcha_store[key] = (text.lower(), now + settings.captcha_ttl_seconds)
+        if len(_captcha_store) > MAX_MEMORY_CAPTCHA:
+            sorted_keys = sorted(_captcha_store, key=lambda k: _captcha_store[k][1])
+            for k in sorted_keys[: len(_captcha_store) - MAX_MEMORY_CAPTCHA]:
+                del _captcha_store[k]
 
     result: dict = {"captcha_key": key, "captcha_image": f"data:image/png;base64,{b64}"}
     if settings.debug:

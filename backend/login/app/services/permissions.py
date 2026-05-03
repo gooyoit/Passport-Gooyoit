@@ -83,19 +83,35 @@ def build_enforcer(db: Session, application_id: int) -> casbin.Enforcer:
 
 
 def get_effective_permissions(db: Session, application_id: int, user_id: int) -> list[str]:
-    """Return permission codes granted by effective roles."""
-    roles = get_effective_roles(db, application_id, user_id)
-    if not roles:
+    application = db.get(Application, application_id)
+    if application is None or application.status != "active":
         return []
-
-    permissions = db.scalars(
-        select(Permission).where(Permission.application_id == application_id)
+    membership = db.scalar(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application_id,
+            ApplicationUser.user_id == user_id,
+            ApplicationUser.status == "active",
+        )
+    )
+    if membership is None:
+        return []
+    role_ids: list[int] = []
+    if application.default_role_id is not None:
+        role_ids.append(application.default_role_id)
+    explicit = db.scalars(
+        select(UserRole.role_id).where(
+            UserRole.application_id == application_id,
+            UserRole.user_id == user_id,
+        )
     ).all()
-    enforcer = build_enforcer(db, application_id)
-
-    granted: set[str] = set()
-    for role in roles:
-        for permission in permissions:
-            if enforcer.enforce(role.code, str(application_id), permission.code, "allow"):
-                granted.add(permission.code)
-    return sorted(granted)
+    role_ids.extend(explicit)
+    if not role_ids:
+        return []
+    return sorted(
+        db.scalars(
+            select(Permission.code)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id.in_(role_ids))
+            .distinct()
+        ).all()
+    )

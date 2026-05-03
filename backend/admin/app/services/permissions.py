@@ -75,3 +75,53 @@ def get_effective_permissions(
         granted.add(code)
 
     return sorted(granted)
+
+def get_effective_permissions_for_users(
+    db: Session, application_id: int, user_ids: list[int],
+) -> dict[int, list[str]]:
+    if not user_ids:
+        return {}
+    application = db.get(Application, application_id)
+    if application is None or application.status != "active":
+        return {uid: [] for uid in user_ids}
+    user_ids_set = set(user_ids)
+    memberships = db.scalars(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application_id,
+            ApplicationUser.user_id.in_(user_ids_set),
+            ApplicationUser.status == "active",
+        )
+    ).all()
+    active_user_ids = {m.user_id for m in memberships}
+    role_ids_by_user: dict[int, set[int]] = {uid: set() for uid in user_ids}
+    if application.default_role_id is not None:
+        for uid in active_user_ids:
+            role_ids_by_user[uid].add(application.default_role_id)
+    explicit = db.execute(
+        select(UserRole.user_id, UserRole.role_id).where(
+            UserRole.application_id == application_id,
+            UserRole.user_id.in_(active_user_ids),
+        )
+    ).all()
+    for uid, rid in explicit:
+        role_ids_by_user[uid].add(rid)
+    all_role_ids = set()
+    for rids in role_ids_by_user.values():
+        all_role_ids.update(rids)
+    if not all_role_ids:
+        return {uid: [] for uid in user_ids}
+    perm_rows = db.execute(
+        select(RolePermission.role_id, Permission.code)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(RolePermission.role_id.in_(all_role_ids))
+    ).all()
+    perms_by_role: dict[int, set[str]] = {}
+    for rid, pcode in perm_rows:
+        perms_by_role.setdefault(rid, set()).add(pcode)
+    result: dict[int, list[str]] = {}
+    for uid in user_ids:
+        granted: set[str] = set()
+        for rid in role_ids_by_user.get(uid, set()):
+            granted.update(perms_by_role.get(rid, set()))
+        result[uid] = sorted(granted)
+    return result

@@ -23,6 +23,25 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8080";
 
 /* ── helpers ─────────────────────────────────────────────── */
 
+function isAllowedRedirect(url: string): boolean {
+  try {
+    const u = new URL(url, window.location.origin);
+    if (u.origin === window.location.origin) return true;
+    const allowed = (import.meta.env.VITE_ALLOWED_REDIRECT_ORIGINS || "").split(",");
+    return allowed.some((o: string) => o.trim() === u.origin);
+  } catch {
+    return false;
+  }
+}
+
+function safeRedirect(url: string) {
+  if (isAllowedRedirect(url)) {
+    window.location.href = url;
+  } else {
+    console.error("Blocked redirect to untrusted origin:", url);
+  }
+}
+
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -181,7 +200,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
       const r = await api<{ captcha_key: string; captcha_image: string; captcha_answer?: string }>("/auth/captcha");
       setCaptchaKey(r.captcha_key);
       setCaptchaImage(r.captcha_image);
-      if (r.captcha_answer) setCaptchaAnswer(r.captcha_answer);
+      if (import.meta.env.DEV && r.captcha_answer) setCaptchaAnswer(r.captcha_answer);
       setCaptchaError("");
     } catch { /* silent */ }
   }
@@ -214,7 +233,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
           body: JSON.stringify({ client_id: oauth.clientId, email, captcha_key: captchaKey, captcha_answer: captchaAnswer }),
         },
       );
-      setDebugCode(r.debug_code ?? "");
+      if (import.meta.env.DEV) setDebugCode(r.debug_code ?? "");
       setCodeSent(true);
       setCodeMsg(t("login.codeSent"));
       setCooldown(60);
@@ -250,7 +269,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
             state: oauth.state,
           }),
         });
-        window.location.href = r.redirect_uri;
+        safeRedirect(r.redirect_uri);
       } else {
         const r = await api<{ redirect_uri: string }>("/auth/email/login-password", {
           method: "POST",
@@ -262,7 +281,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
             state: oauth.state,
           }),
         });
-        window.location.href = r.redirect_uri;
+        safeRedirect(r.redirect_uri);
       }
     } catch (err) {
       setMsg((err as Error).message);
@@ -489,7 +508,7 @@ function RegisterPage({
       const r = await api<{ captcha_key: string; captcha_image: string; captcha_answer?: string }>("/auth/captcha");
       setCaptchaKey(r.captcha_key);
       setCaptchaImage(r.captcha_image);
-      if (r.captcha_answer) setCaptchaAnswer(r.captcha_answer);
+      if (import.meta.env.DEV && r.captcha_answer) setCaptchaAnswer(r.captcha_answer);
       setCaptchaError("");
     } catch { /* silent */ }
   }
@@ -556,7 +575,7 @@ function RegisterPage({
           password: form.password,
         }),
       });
-      window.location.href = r.redirect_uri;
+      safeRedirect(r.redirect_uri);
     } catch (err) {
       setMsg((err as Error).message);
     } finally {

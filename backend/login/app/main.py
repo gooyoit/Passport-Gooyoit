@@ -1,5 +1,7 @@
 """FastAPI application factory."""
 
+import hashlib
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -17,12 +19,15 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.frontend_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
     )
+    session_key = settings.session_secret_key or hashlib.sha256(
+        b"session:" + settings.secret_key.encode()
+    ).hexdigest()
     app.add_middleware(
         SessionMiddleware,
-        secret_key=settings.secret_key,
+        secret_key=session_key,
         same_site="lax",
         https_only=settings.cookie_secure,
     )

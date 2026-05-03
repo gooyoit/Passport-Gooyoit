@@ -1,5 +1,6 @@
 """Security helpers for secrets, codes, and JWTs."""
 
+import bcrypt
 from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
@@ -39,6 +40,17 @@ def hash_secret(value: str) -> str:
 def verify_secret(value: str, hashed_value: str) -> bool:
     """Verify a plaintext secret against a stored hash."""
     return hmac.compare_digest(hash_secret(value), hashed_value)
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def create_access_token(

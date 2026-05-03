@@ -10,11 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import (
+    hash_password,
     create_access_token,
     hash_secret,
     random_digits,
     random_token,
     utcnow,
+    verify_password,
     verify_secret,
 )
 from app.models import (
@@ -34,7 +36,7 @@ from app.services.applications import (
     validate_redirect_uri,
 )
 from app.services.permissions import get_effective_permissions, get_effective_roles
-from app.services.sso import create_sso_session, revoke_sso_session
+from app.services.sso import create_sso_session
 
 logger = structlog.get_logger(__name__)
 
@@ -63,6 +65,12 @@ def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = 
         )
 
     code = random_digits()
+    sent = send_verification_code(email, code)
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email",
+        )
     verification = EmailVerificationCode(
         email=email.lower(),
         code_hash=hash_secret(code),
@@ -71,7 +79,6 @@ def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = 
     )
     db.add(verification)
     db.commit()
-    sent = send_verification_code(email, code)
     logger.info("email_code_issued", email=email, purpose=purpose, sent=sent)
     return code
 
@@ -108,6 +115,7 @@ def complete_email_login(
             EmailVerificationCode.expires_at > now,
         )
         .order_by(EmailVerificationCode.created_at.desc())
+        .with_for_update()
     )
     if verification is None or not verify_secret(code, verification.code_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
@@ -166,7 +174,7 @@ def complete_password_login(
     user = db.scalar(select(User).where(User.email == normalized_email))
     if user is None or not user.hashed_password:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-    if not verify_secret(password, user.hashed_password):
+    if not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     logger.info("password_login_success", email=normalized_email, user_id=user.id)
@@ -245,6 +253,7 @@ def complete_email_register(
             EmailVerificationCode.expires_at > now,
         )
         .order_by(EmailVerificationCode.created_at.desc())
+        .with_for_update()
     )
     if verification is None or not verify_secret(code, verification.code_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
@@ -253,7 +262,7 @@ def complete_email_register(
     user = User(
         email=normalized_email,
         display_name=f"{first_name} {last_name}",
-        hashed_password=hash_secret(password),
+        hashed_password=hash_password(password),
     )
     db.add(user)
     db.flush()

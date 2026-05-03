@@ -1,5 +1,7 @@
 """Redis-based rate limiting."""
 
+import ipaddress
+
 from fastapi import Request
 from redis import Redis
 
@@ -12,10 +14,30 @@ class RateLimitExceeded(Exception):
         self.retry_after = retry_after
 
 
+TRUSTED_PROXIES = {"127.0.0.1", "::1"}
+
+
+def _is_trusted(ip_str: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip_str.strip())
+        for trusted in TRUSTED_PROXIES:
+            if "/" in trusted:
+                if addr in ipaddress.ip_network(trusted, strict=False):
+                    return True
+            elif addr == ipaddress.ip_address(trusted):
+                return True
+    except ValueError:
+        pass
+    return False
+
+
 def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        for ip in reversed(forwarded.split(",")):
+            ip = ip.strip()
+            if ip and not _is_trusted(ip):
+                return ip
     return request.client.host if request.client else "unknown"
 
 

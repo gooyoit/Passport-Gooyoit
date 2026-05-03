@@ -119,7 +119,13 @@ async def authorize_redirect(
 
 async def fetch_provider_profile(provider: str, client: Any, request: Request) -> dict[str, Any]:
     """Fetch normalized provider profile through Authlib."""
-    token = await client.authorize_access_token(request)
+    try:
+        token = await client.authorize_access_token(request)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OAuth token exchange failed",
+        ) from exc
     if provider == "google":
         profile = token.get("userinfo")
         if profile is None:

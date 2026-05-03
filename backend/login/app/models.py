@@ -100,7 +100,7 @@ class ApplicationLoginMethod(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("application_id", "method"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
     method: Mapped[str] = mapped_column(String(64), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     config: Mapped[dict | None] = mapped_column(JSON)
@@ -113,8 +113,8 @@ class ApplicationUser(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("application_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -127,7 +127,7 @@ class Role(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("application_id", "code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -141,7 +141,7 @@ class Permission(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("application_id", "code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -168,8 +168,8 @@ class UserRole(Base):
     __table_args__ = (UniqueConstraint("application_id", "user_id", "role_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
@@ -184,8 +184,8 @@ class OAuthAuthorizationCode(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     redirect_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
     scope: Mapped[str | None] = mapped_column(String(512))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

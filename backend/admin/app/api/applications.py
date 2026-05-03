@@ -1,7 +1,10 @@
 """Application CRUD endpoints: list, create, get, login-methods, roles, permissions."""
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -28,7 +31,7 @@ from app.schemas import (
     RoleCreate,
     RoleRead,
 )
-from app.services.applications import create_application
+from app.services.applications import _hash_secret, create_application
 
 router = APIRouter(tags=["applications"], dependencies=[Depends(require_admin)])
 
@@ -84,6 +87,7 @@ def get_application(
 def update_application(
     application_id: int,
     payload: ApplicationUpdate,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> Application:
     """Update an application's settings."""
@@ -104,7 +108,11 @@ def update_application(
         application.enable_sso = payload.enable_sso
     if payload.status is not None:
         application.status = payload.status
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     db.refresh(application)
     return application
 
@@ -124,10 +132,6 @@ def regenerate_secret(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Generate a new client secret (old secrets remain valid)."""
-    from app.services.applications import _hash_secret
-
-    import secrets
-
     application = db.get(Application, application_id)
     if application is None:
         raise HTTPException(
@@ -142,7 +146,11 @@ def regenerate_secret(
             secret_suffix=new_secret[-4:],
         )
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     return {"client_secret": new_secret}
 
 
@@ -169,13 +177,16 @@ def list_secrets(
     )
 
 
-@router.delete("/applications/{application_id}/secrets/{secret_id}")
+@router.delete(
+    "/applications/{application_id}/secrets/{secret_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def delete_secret(
     application_id: int,
     secret_id: int,
     _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> None:
     """Delete a client secret."""
     secret = db.get(ApplicationClientSecret, secret_id)
     if secret is None or secret.application_id != application_id:
@@ -183,8 +194,11 @@ def delete_secret(
             status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found"
         )
     db.delete(secret)
-    db.commit()
-    return {"status": "ok"}
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +248,11 @@ def upsert_login_method(
     else:
         method.enabled = payload.enabled
         method.config = payload.config or {}
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     return {"status": "ok"}
 
 
@@ -290,7 +308,11 @@ def create_role(
         is_default=payload.is_default,
     )
     db.add(role)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     db.refresh(role)
     return role
 
@@ -325,6 +347,7 @@ def list_permissions(
 def create_permission(
     application_id: int,
     payload: PermissionCreate,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> Permission:
     """Create an application-local permission."""
@@ -335,7 +358,11 @@ def create_permission(
         description=payload.description,
     )
     db.add(permission)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     db.refresh(permission)
     return permission
 
@@ -351,6 +378,7 @@ def assign_permission_to_role(
     application_id: int,
     role_id: int,
     permission_id: int,
+    _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """Assign a permission to a role."""
@@ -375,5 +403,9 @@ def assign_permission_to_role(
     )
     if existing is None:
         db.add(RolePermission(role_id=role_id, permission_id=permission_id))
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     return {"status": "ok"}

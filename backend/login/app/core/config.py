@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str = "redis://127.0.0.1:6379/0"
     secret_key: str = Field(default="dev-secret-change-me-with-32-bytes", min_length=32)
+    session_secret_key: str = ""
     jwt_issuer: str = "gooyoit-passport"
     cookie_secure: bool = True
     frontend_origins: list[str] = [

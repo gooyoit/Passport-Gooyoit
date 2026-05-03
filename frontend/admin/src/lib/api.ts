@@ -25,13 +25,18 @@ export async function request<T>(
   return response.json() as Promise<T>;
 }
 
+const _passportUrl = import.meta.env.VITE_PASSPORT_URL;
+const _clientId = import.meta.env.VITE_CLIENT_ID;
+
+if (!_passportUrl || !_clientId) {
+  console.error("Missing required env vars: VITE_PASSPORT_URL, VITE_CLIENT_ID");
+}
+
 export function buildAuthorizeUrl(redirectUri: string) {
-  const passportUrl = import.meta.env.VITE_PASSPORT_URL;
-  const clientId = import.meta.env.VITE_CLIENT_ID;
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: _clientId,
     redirect_uri: redirectUri,
     response_type: "code",
   });
-  return `${passportUrl}?${params}`;
+  return `${_passportUrl}?${params}`;
 }

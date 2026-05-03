@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.security import decode_access_token, utcnow
+from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import ApplicationLoginMethod, User
 from app.schemas import (
@@ -30,7 +30,6 @@ from app.services.auth import (
     get_or_create_oauth_user,
     refresh_access_token,
     revoke_refresh_token,
-    revoke_sso_session,
 )
 from app.services.oauth_providers import (
     authorize_redirect,
