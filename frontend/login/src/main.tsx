@@ -51,7 +51,7 @@ function useOAuthParams() {
     clientId: p.get("client_id") ?? "",
     redirectUri: p.get("redirect_uri") ?? "",
     state: p.get("state") ?? "",
-    appName: p.get("application_name") ?? "Gooyoit",
+    appName: p.get("application_name") || "Gooyoit",
   };
 }
 
