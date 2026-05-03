@@ -51,6 +51,9 @@ export interface ApplicationUser {
   id: number;
   application_id: number;
   user_id: number;
+  user_email: string;
+  user_display_name: string | null;
+  user_status: string;
   status: string;
   roles: string[];
   permissions: string[];
