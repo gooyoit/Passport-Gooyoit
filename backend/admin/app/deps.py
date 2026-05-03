@@ -1,14 +1,10 @@
 """FastAPI dependencies for authentication and authorization."""
 
-import structlog
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import httpx
 
 from app.config import settings
-
-logger = structlog.get_logger(__name__)
 
 _bearer_scheme = HTTPBearer()
 

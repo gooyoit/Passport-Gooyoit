@@ -1,6 +1,6 @@
 """Token-exchange endpoint."""
 
-import structlog
+import logging
 
 import httpx
 
@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.schemas import TokenExchangeRequest, TokenExchangeResponse
 from app.services.passport import exchange_token
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["config"])
 
