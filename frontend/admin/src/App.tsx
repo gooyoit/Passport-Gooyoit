@@ -29,6 +29,7 @@ import type {
   Application,
   ApplicationUser,
   ApplicationCreated,
+  ClientSecretItem,
   LoginMethod,
   Permission,
   Role,
@@ -390,6 +391,8 @@ function ApplicationsView({
   onLoad,
   onCreate,
   onUpdate,
+  onRegenerateSecret,
+  onDeleteSecret,
   onSelect,
 }: {
   applications: Application[];
@@ -672,6 +675,7 @@ function AppDetailLayout({
 }) {
   const tabs: { key: ViewKey; label: string; icon: React.ElementType }[] = [
     { key: "login-methods", label: "登录方式", icon: Key },
+    { key: "secrets", label: "密钥管理", icon: Shield },
     { key: "roles", label: "角色", icon: Shield },
     { key: "permissions", label: "权限", icon: Key },
     { key: "app-users", label: "应用用户", icon: Users },
@@ -753,6 +757,83 @@ const METHOD_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   google: { icon: Globe, color: "text-red-500", bg: "bg-red-50" },
   github: { icon: Key, color: "text-gray-800", bg: "bg-gray-100" },
 };
+
+function SecretsView({
+  appId,
+  token,
+  version,
+  onRegenerate,
+  onDelete,
+}: {
+  appId: number;
+  token: string;
+  version: number;
+  onRegenerate: () => void;
+  onDelete: (secretId: number) => void;
+}) {
+  const [secrets, setSecrets] = useState<ClientSecretItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await request<ClientSecretItem[]>(
+        `/applications/${appId}/secrets`,
+        token,
+      );
+      setSecrets(data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [appId, version]);
+
+  if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
+        <p className="text-sm text-muted">
+          <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
+          客户端密钥用于后端 Token 交换，请妥善保管。密钥明文仅在创建时展示一次。
+        </p>
+        <button onClick={onRegenerate} className={cn(btnOutline, "text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-light")}>
+          <RefreshCw size={14} /> 生成新密钥
+        </button>
+      </div>
+      {secrets.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted">
+          暂无密钥，请点击上方"生成新密钥"
+        </div>
+      ) : (
+        <div className="divide-y divide-border rounded-lg border border-border">
+          {secrets.map((s) => (
+            <div key={s.id} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-mono text-muted">
+                  {"•".repeat(32)}
+                  <span className="ml-2 text-xs text-muted/60">{s.id}</span>
+                </p>
+                <p className="text-xs text-muted/60">
+                  创建于 {new Date(s.created_at).toLocaleString("zh-CN")}
+                </p>
+              </div>
+              <button
+                onClick={() => onDelete(s.id)}
+                className="rounded-md px-2.5 py-1 text-xs text-red-500 hover:bg-red-50"
+              >
+                删除
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LoginMethodsView({
   appId,
@@ -1366,6 +1447,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [secretModal, setSecretModal] = useState<{ clientId: string; clientSecret: string } | null>(null);
+  const [secretsVersion, setSecretsVersion] = useState(0);
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -1498,11 +1580,13 @@ export default function App() {
   async function regenerateSecret(appId: number, clientId: string) {
     const data = await request<{ client_secret: string }>(`/applications/${appId}/regenerate-secret`, accessToken, { method: "POST" });
     setSecretModal({ clientId, clientSecret: data.client_secret });
+    setSecretsVersion((v) => v + 1);
   }
 
   async function deleteSecret(appId: number, secretId: number) {
     await request(`/applications/${appId}/secrets/${secretId}`, accessToken, { method: "DELETE" });
     toast("密钥已删除", "success");
+    setSecretsVersion((v) => v + 1);
   }
 
   async function toggleUserStatus(userId: number, currentStatus: string) {
@@ -1646,6 +1730,17 @@ export default function App() {
           {selectedApp && view === "login-methods" && (
             <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
               <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
+            </AppDetailLayout>
+          )}
+          {selectedApp && view === "secrets" && (
+            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps}>
+              <SecretsView
+                appId={selectedApp.id}
+                token={accessToken ?? ""}
+                version={secretsVersion}
+                onRegenerate={() => regenerateSecret(selectedApp.id, selectedApp.client_id)}
+                onDelete={(secretId) => deleteSecret(selectedApp.id, secretId)}
+              />
             </AppDetailLayout>
           )}
           {selectedApp && view === "roles" && (

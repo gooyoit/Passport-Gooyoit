@@ -82,4 +82,10 @@ export type ViewKey =
   | "login-methods"
   | "roles"
   | "permissions"
-  | "app-users";
+  | "app-users"
+  | "secrets";
+
+export interface ClientSecretItem {
+  id: number;
+  created_at: string;
+}
