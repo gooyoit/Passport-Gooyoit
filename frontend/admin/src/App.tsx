@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle,
-  ChevronLeft,
   ChevronRight,
   Copy,
   Download,
@@ -16,12 +15,14 @@ import {
   List,
   LogOut,
   Mail,
+  Menu,
   MessageCircle,
   Plus,
   RefreshCw,
   Search,
   Shield,
   Users,
+  X,
 } from "lucide-react";
 import type {
   Application,
@@ -36,33 +37,28 @@ import type {
   ViewKey,
 } from "./types";
 import { request, buildAuthorizeUrl } from "./lib/api";
-import { cn, methodDescription, methodLabel } from "./lib/utils";
+import { cn, methodDescription, methodLabel, statusColor, statusLabel } from "./lib/utils";
 
 /* ─── Reusable Components ──────────────────────────────────── */
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-3xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]", className)}>
+    <div className={cn("rounded-xl border border-border bg-white p-5 shadow-sm", className)}>
       {children}
-    </section>
+    </div>
   );
 }
 
 function SectionHeader({
   title,
-  description,
   action,
 }: {
   title: string;
-  description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-      <div>
-        <h2 className="text-xl font-bold text-slate-950">{title}</h2>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
-      </div>
+    <div className="mb-4 flex items-center justify-between">
+      <h2 className="text-lg font-semibold text-[#17202a]">{title}</h2>
       {action}
     </div>
   );
@@ -73,44 +69,37 @@ function MetricCard({
   value,
   icon: Icon,
   color = "text-brand",
-  action,
-  onClick,
 }: {
   label: string;
   value: number;
   icon: React.ElementType;
   color?: string;
-  action?: string;
-  onClick?: () => void;
 }) {
   return (
-    <Card className="p-5">
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className={cn("mt-3 text-4xl font-bold text-slate-950", color === "text-success" && "text-success")}>{value}</div>
-      {action && onClick ? (
-        <button type="button" className="mt-4 text-sm font-medium text-[#1a73e8]" onClick={onClick}>
-          {action}
-        </button>
-      ) : null}
+    <Card className="flex items-center gap-4">
+      <div className={cn("flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light", color)}>
+        <Icon size={22} />
+      </div>
+      <div>
+        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-sm text-muted">{label}</p>
+      </div>
     </Card>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex min-w-14 items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
-        status === "active" ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-600",
-      )}
-    >
-      {status === "active" ? "正常" : "已禁用"}
+    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", statusColor(status))}>
+      {statusLabel(status)}
     </span>
   );
 }
 
 function EmptyBlock({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">{text}</div>;
+  return (
+    <div className="py-12 text-center text-sm text-muted">{text}</div>
+  );
 }
 
 function Modal({
@@ -128,19 +117,16 @@ function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4" onClick={onClose}>
-      <div
-        className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-          <h3 className="text-xl font-bold text-slate-950">{title}</h3>
-          <button type="button" onClick={onClose} className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
-            ×
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button onClick={onClose} className="rounded-lg p-1 hover:bg-surface">
+            <X size={18} />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-5 py-5">{children}</div>
-        {actions && <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">{actions}</div>}
+        <div className="space-y-3">{children}</div>
+        {actions && <div className="mt-5 flex justify-end gap-2">{actions}</div>}
       </div>
     </div>
   );
@@ -164,9 +150,9 @@ function Field({
 const inputCls =
   "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20";
 const btnCls =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition";
-const btnPrimary = cn(btnCls, "bg-[#1a73e8] text-white hover:bg-[#1557b0]");
-const btnOutline = cn(btnCls, "border border-slate-200 bg-white text-slate-800 hover:bg-slate-50");
+  "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors";
+const btnPrimary = cn(btnCls, "bg-brand text-white hover:bg-brand-dark");
+const btnOutline = cn(btnCls, "border border-border bg-white hover:bg-surface");
 
 /* ─── CopyButton ──────────────────────────────────────── */
 
@@ -277,28 +263,25 @@ function SidebarItem({
   active,
   icon: Icon,
   label,
-  collapsed,
   onClick,
 }: {
   active: boolean;
   icon: React.ElementType;
   label: string;
-  collapsed: boolean;
   onClick: () => void;
 }) {
   return (
     <button
-      type="button"
       onClick={onClick}
       className={cn(
-        "flex h-14 items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
-        collapsed ? "justify-center md:px-0" : "",
-        active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50",
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        active
+          ? "bg-sidebar-active text-white"
+          : "text-gray-400 hover:bg-sidebar-hover hover:text-white",
       )}
-      title={collapsed ? label : undefined}
     >
-      <span className={cn("shrink-0", active ? "text-[#1a73e8]" : "text-slate-700")}>{<Icon className="size-5" />}</span>
-      {!collapsed && <span className="truncate">{label}</span>}
+      <Icon size={18} />
+      {label}
     </button>
   );
 }
@@ -321,44 +304,41 @@ function DashboardView({
   const activeApps = applications.filter((a) => a.status === "active").length;
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
-        <MetricCard label="应用总数" value={applications.length} icon={Globe} action="查看全部" onClick={() => onNavigate("applications")} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="应用总数" value={applications.length} icon={Globe} />
         <MetricCard label="活跃应用" value={activeApps} icon={CheckCircle} color="text-success" />
-        <MetricCard label="用户总数" value={users.length} icon={Users} action="查看全部" onClick={() => onNavigate("users")} />
+        <MetricCard label="用户总数" value={users.length} icon={Users} />
         <MetricCard label="活跃用户" value={activeUsers} icon={CheckCircle} color="text-success" />
       </div>
 
       <Card>
-        <SectionHeader
-          title="最近应用"
-          description="展示最近创建或更新的接入系统"
-          action={
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setAppLayout("grid")}
-                className={cn(
-                  "rounded-xl p-2 transition-colors",
-                  appLayout === "grid" ? "bg-brand-light text-brand" : "text-muted hover:bg-slate-50",
-                )}
-              >
-                <LayoutGrid size={16} />
-              </button>
-              <button
-                onClick={() => setAppLayout("list")}
-                className={cn(
-                  "rounded-xl p-2 transition-colors",
-                  appLayout === "list" ? "bg-brand-light text-brand" : "text-muted hover:bg-slate-50",
-                )}
-              >
-                <List size={16} />
-              </button>
-              <span className="mx-1 h-4 w-px bg-slate-200" />
-              <button onClick={() => onNavigate("applications")} className={cn(btnOutline, "text-xs")}>
-                查看全部
-              </button>
-            </div>
-          }
-        />
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">最近应用</h3>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setAppLayout("grid")}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                appLayout === "grid" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
+              )}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setAppLayout("list")}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                appLayout === "list" ? "bg-brand-light text-brand" : "text-muted hover:text-gray-600",
+              )}
+            >
+              <List size={15} />
+            </button>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <button onClick={() => onNavigate("applications")} className={cn(btnOutline, "text-xs")}>
+              查看全部
+            </button>
+          </div>
+        </div>
         {applications.length === 0 ? (
           <EmptyBlock text="暂无应用" />
         ) : appLayout === "grid" ? (
@@ -366,14 +346,14 @@ function DashboardView({
             {applications.slice(0, 8).map((app) => (
               <div
                 key={app.id}
-                className="group cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-[#1a73e8]/40 hover:shadow-sm"
+                className="group cursor-pointer rounded-xl border border-border p-4 transition-all hover:border-brand/40 hover:shadow-sm"
                 onClick={() => onSelectApp(app)}
               >
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-light text-brand">
                   <Globe size={20} />
                 </div>
-                <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
-                <p className="mt-0.5 truncate text-xs text-slate-500">{app.client_id}</p>
+                <p className="truncate text-sm font-semibold">{app.name}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">{app.client_id}</p>
                 <div className="mt-2">
                   <StatusBadge status={app.status} />
                 </div>
@@ -381,11 +361,11 @@ function DashboardView({
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="divide-y divide-border rounded-lg border border-border">
             {applications.slice(0, 8).map((app) => (
               <div
                 key={app.id}
-                className="flex items-center justify-between px-5 py-4 cursor-pointer transition hover:bg-slate-50"
+                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface"
                 onClick={() => onSelectApp(app)}
               >
                 <div className="flex items-center gap-3">
@@ -393,8 +373,8 @@ function DashboardView({
                     <Globe size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{app.name}</p>
-                    <p className="text-xs text-slate-500">{app.client_id}</p>
+                    <p className="text-sm font-medium">{app.name}</p>
+                    <p className="text-xs text-muted">{app.client_id}</p>
                   </div>
                 </div>
                 <StatusBadge status={app.status} />
@@ -515,7 +495,6 @@ function ApplicationsView({
       <Card>
         <SectionHeader
           title="应用列表"
-          description="管理所有 OAuth 接入系统"
           action={
             <button onClick={() => { resetForm(); setOpen(true); }} className={btnPrimary}>
               <Plus size={16} /> 新建应用
@@ -527,49 +506,48 @@ function ApplicationsView({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                <tr>
-                  <th className="px-5 py-3">应用</th>
-                  <th className="px-4 py-3">用户池</th>
-                  <th className="px-4 py-3">SSO</th>
-                  <th className="px-4 py-3"></th>
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted">
+                  <th className="px-4 py-2 font-medium">名称</th>
+                  <th className="px-4 py-2 font-medium">描述</th>
+                  <th className="px-4 py-2 font-medium">Client ID</th>
+                  <th className="px-4 py-2 font-medium">用户池</th>
+                  <th className="px-4 py-2 font-medium">SSO</th>
+                  <th className="px-4 py-2 font-medium">状态</th>
+                  <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-border">
                 {applications.map((app) => (
-                  <tr key={app.id} className="bg-white hover:bg-slate-50">
-                    <td className="px-5 py-5 align-middle">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-slate-900">{app.name}</div>
-                          {app.description && (
-                            <div className="mt-1 text-xs text-slate-500">{app.description}</div>
-                          )}
-                          <div className="mt-1.5 flex items-center gap-1">
-                            <code className="text-xs font-mono text-slate-400">{app.client_id}</code>
-                            <CopyButton text={app.client_id} size={12} />
-                          </div>
-                        </div>
-                        <StatusBadge status={app.status} />
+                  <tr key={app.id} className="hover:bg-surface">
+                    <td className="px-4 py-3 font-medium">{app.name}</td>
+                    <td className="px-4 py-3 text-xs text-muted max-w-48 truncate">{app.description ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-muted">{app.client_id}</code>
+                        <CopyButton text={app.client_id} size={12} />
                       </div>
                     </td>
-                    <td className="px-4 py-5 text-slate-500 align-middle">
+                    <td className="px-4 py-3">
                       <span className="text-xs">{app.enable_public_users ? "公共" : "私有"}</span>
                     </td>
-                    <td className="px-4 py-5 text-slate-500 align-middle">
+                    <td className="px-4 py-3">
                       <span className="text-xs">{app.enable_sso ? "开启" : "关闭"}</span>
                     </td>
-                    <td className="px-4 py-5 align-middle">
+                    <td className="px-4 py-3">
+                      <StatusBadge status={app.status} />
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => openEdit(app)}
-                          className="rounded-md px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-gray-700 transition-colors"
+                          className="rounded-md px-2.5 py-1 text-xs text-muted hover:bg-surface hover:text-gray-700"
                         >
                           编辑
                         </button>
                         <button
                           onClick={() => onSelect(app)}
-                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light transition-colors"
+                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light"
                         >
                           管理
                         </button>
@@ -637,11 +615,11 @@ function UsersView({
   );
   return (
     <Card>
-      <SectionHeader title="全局用户" description="管理 Passport 注册用户状态" />
-      <div className="relative mx-5 mb-4">
-        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <SectionHeader title="全局用户" />
+      <div className="mb-4 flex items-center gap-2">
+        <Search size={16} className="text-muted" />
         <input
-          className={cn(inputCls, "max-w-xs pl-9")}
+          className={cn(inputCls, "max-w-xs")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="搜索邮箱或名称…"
@@ -650,32 +628,32 @@ function UsersView({
       {filtered.length === 0 ? (
         <EmptyBlock text="暂无用户" />
       ) : (
-        <div className="overflow-x-auto px-5">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              <tr>
-                <th className="px-4 py-3">邮箱</th>
-                <th className="px-4 py-3">显示名</th>
-                <th className="px-4 py-3">状态</th>
-                <th className="px-4 py-3">操作</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted">
+                <th className="px-4 py-2 font-medium">邮箱</th>
+                <th className="px-4 py-2 font-medium">显示名</th>
+                <th className="px-4 py-2 font-medium">状态</th>
+                <th className="px-4 py-2 font-medium">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {filtered.map((user) => (
-                <tr key={user.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-5 font-medium text-slate-900">{user.email}</td>
-                  <td className="px-4 py-5 text-slate-500">{user.display_name ?? "-"}</td>
-                  <td className="px-4 py-5">
+                <tr key={user.id} className="hover:bg-surface">
+                  <td className="px-4 py-3 font-medium">{user.email}</td>
+                  <td className="px-4 py-3 text-muted">{user.display_name ?? "-"}</td>
+                  <td className="px-4 py-3">
                     <StatusBadge status={user.status} />
                   </td>
-                  <td className="px-4 py-5">
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => onToggleStatus(user.id, user.status)}
                       className={cn(
-                        "inline-flex h-8 items-center justify-center rounded-xl border px-3 text-xs font-semibold whitespace-nowrap transition",
+                        "rounded-md px-2.5 py-1 text-xs font-medium",
                         user.status === "active"
-                          ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
-                          : "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
+                          ? "bg-danger-light text-danger hover:bg-danger hover:text-white"
+                          : "bg-success-light text-success hover:bg-success hover:text-white",
                       )}
                     >
                       {user.status === "active" ? "禁用" : "启用"}
@@ -756,7 +734,7 @@ function AppDetailLayout({
             </div>
           </div>
         </div>
-        <div className="border-b border-slate-200 px-5 pt-3">
+        <div className="border-b border-border px-6 pt-3">
           <div className="flex gap-1">
             {tabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -767,8 +745,8 @@ function AppDetailLayout({
                   className={cn(
                     "flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors",
                     activeTab === tab.key
-                      ? "bg-[#f6f7f8] text-[#1a73e8] border-b-2 border-[#1a73e8] -mb-px"
-                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
+                      ? "bg-surface text-brand border-b-2 border-brand -mb-px"
+                      : "text-muted hover:text-[#17202a] hover:bg-surface/50",
                   )}
                 >
                   <TabIcon size={15} />
@@ -828,8 +806,8 @@ function SecretsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-sm text-slate-500">
+      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
+        <p className="text-sm text-muted">
           <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
           客户端密钥用于后端 Token 交换，请妥善保管。密钥明文仅在创建时展示一次。
         </p>
@@ -842,17 +820,17 @@ function SecretsView({
           暂无密钥，请点击上方"生成新密钥"
         </div>
       ) : (
-        <div className="divide-y divide-slate-200 rounded-2xl border border-slate-200">
+        <div className="divide-y divide-border rounded-lg border border-border">
           {secrets.map((s) => (
-            <div key={s.id} className="flex items-center justify-between px-4 py-3.5">
+            <div key={s.id} className="flex items-center justify-between px-4 py-3">
               <div>
-                <p className="text-sm font-mono text-slate-500">
+                <p className="text-sm font-mono text-muted">
                   {s.secret_prefix && s.secret_suffix
                     ? `${s.secret_prefix}••••••••••••${s.secret_suffix}`
                     : "••••••••••••••••••••••••••••••"}
-                  <span className="ml-2 text-xs text-slate-400">#{s.id}</span>
+                  <span className="ml-2 text-xs text-muted/60">#{s.id}</span>
                 </p>
-                <p className="mt-0.5 text-xs text-slate-400">
+                <p className="text-xs text-muted/60">
                   创建于 {new Date(s.created_at).toLocaleString("zh-CN")}
                 </p>
               </div>
@@ -925,8 +903,8 @@ function LoginMethodsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-sm text-slate-500">
+      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
+        <p className="text-sm text-muted">
           <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
           管理该应用支持的登录方式，已启用的方式将在登录页展示。
         </p>
@@ -961,20 +939,20 @@ function LoginMethodsView({
               <div
                 key={m.id}
                 className={cn(
-                  "group rounded-2xl border p-5 transition-all",
+                  "group rounded-xl border p-4 transition-all",
                   m.enabled
                     ? "border-brand/30 bg-brand-light/30"
-                    : "border-slate-200 bg-white opacity-60",
+                    : "border-border bg-white opacity-60",
                 )}
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", meta.bg)}>
+                  <div className="flex items-start gap-3">
+                    <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", meta.bg)}>
                       <MethodIcon size={20} className={meta.color} />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{methodLabel(m.method)}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{methodDescription(m.method)}</p>
+                      <p className="text-sm font-semibold">{methodLabel(m.method)}</p>
+                      <p className="mt-0.5 text-xs text-muted">{methodDescription(m.method)}</p>
                     </div>
                   </div>
                   <button
@@ -992,6 +970,12 @@ function LoginMethodsView({
                     />
                   </button>
                 </div>
+                <p className={cn(
+                  "mt-3 text-xs font-medium",
+                  m.enabled ? "text-success" : "text-muted",
+                )}>
+                  {m.enabled ? "已启用" : "未启用"}
+                </p>
               </div>
             );
           })}
@@ -1057,7 +1041,7 @@ function RolesView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">管理应用内的角色，角色可关联权限并分配给用户。</p>
+        <p className="text-sm text-muted">管理应用内的角色，角色可关联权限并分配给用户。</p>
         <button onClick={() => setOpen(true)} className={btnPrimary}>
           <Plus size={16} /> 新建角色
         </button>
@@ -1070,33 +1054,31 @@ function RolesView({
             <div
               key={role.id}
               className={cn(
-                "rounded-2xl border p-5 transition-all hover:shadow-md",
-                role.is_default ? "border-brand/30 bg-brand-light/20" : "border-slate-200 bg-white",
+                "rounded-xl border p-4 transition-all hover:shadow-md",
+                role.is_default ? "border-brand/30 bg-brand-light/20" : "border-border bg-white",
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <div className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                  role.is_default ? "bg-brand text-white" : "bg-slate-100 text-slate-400",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                  role.is_default ? "bg-brand text-white" : "bg-surface text-muted",
                 )}>
-                  <Shield size={18} />
+                  <Shield size={16} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-900 truncate">{role.name}</span>
+                    <span className="text-sm font-semibold truncate">{role.name}</span>
                     {role.is_default && (
                       <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-xs text-white font-medium">
                         默认
                       </span>
                     )}
                   </div>
-                  <div className="mt-1">
-                    <code className="text-xs text-slate-500">{role.code}</code>
-                  </div>
+                  <code className="mt-0.5 block text-xs text-muted">{role.code}</code>
                 </div>
               </div>
               {role.description && (
-                <p className="mt-3 text-xs leading-relaxed text-slate-500">{role.description}</p>
+                <p className="mt-2.5 text-xs text-muted leading-relaxed">{role.description}</p>
               )}
             </div>
           ))}
@@ -1206,7 +1188,7 @@ function PermissionsView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">定义细粒度权限，并将其分配给角色。</p>
+        <p className="text-sm text-muted">定义细粒度权限，并将其分配给角色。</p>
         <div className="flex gap-2">
           <button onClick={() => setAssignOpen(true)} className={btnOutline}>
             分配权限
@@ -1221,21 +1203,21 @@ function PermissionsView({
       ) : (
         <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              <tr>
-                <th className="px-4 py-3">名称</th>
-                <th className="px-4 py-3">标识</th>
-                <th className="px-4 py-3">描述</th>
+            <thead>
+              <tr className="border-b border-border bg-surface/50 text-left text-xs text-muted">
+                <th className="px-4 py-2.5 font-medium">名称</th>
+                <th className="px-4 py-2.5 font-medium">标识</th>
+                <th className="px-4 py-2.5 font-medium">描述</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {perms.map((p) => (
-                <tr key={p.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-5 font-medium text-slate-900">{p.name}</td>
-                  <td className="px-4 py-5">
-                    <code className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500">{p.code}</code>
+                <tr key={p.id} className="transition-colors hover:bg-surface/50">
+                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3">
+                    <code className="rounded-md bg-surface px-2 py-0.5 text-xs font-mono text-muted">{p.code}</code>
                   </td>
-                  <td className="px-4 py-5 text-slate-500">{p.description ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{p.description ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1355,7 +1337,7 @@ function AppUsersView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">已加入此应用的用户列表，可管理角色和状态。</p>
+        <p className="text-sm text-muted">已加入此应用的用户列表，可管理角色和状态。</p>
         <button onClick={() => setAssignOpen(true)} className={btnPrimary}>
           <Plus size={16} /> 分配角色
         </button>
@@ -1365,54 +1347,54 @@ function AppUsersView({
       ) : (
         <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              <tr>
-                <th className="px-4 py-3">用户</th>
-                <th className="px-4 py-3">邮箱</th>
-                <th className="px-4 py-3">状态</th>
-                <th className="px-4 py-3">角色</th>
-                <th className="px-4 py-3">权限</th>
-                <th className="px-4 py-3">操作</th>
+            <thead>
+              <tr className="border-b border-border bg-surface/50 text-left text-xs text-muted">
+                <th className="px-4 py-2.5 font-medium">用户</th>
+                <th className="px-4 py-2.5 font-medium">邮箱</th>
+                <th className="px-4 py-2.5 font-medium">状态</th>
+                <th className="px-4 py-2.5 font-medium">角色</th>
+                <th className="px-4 py-2.5 font-medium">权限</th>
+                <th className="px-4 py-2.5 font-medium">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {members.map((m) => (
-                <tr key={m.id} className="bg-white hover:bg-slate-50">
-                  <td className="px-4 py-5 align-middle">
+                <tr key={m.id} className="transition-colors hover:bg-surface/50">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand text-xs font-semibold">
                         {(m.user_display_name ?? m.user_email ?? "?")[0].toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-900">{m.user_display_name ?? "-"}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">ID: {m.user_id}</p>
+                        <p className="text-sm font-medium">{m.user_display_name ?? "-"}</p>
+                        <p className="text-xs text-muted">ID: {m.user_id}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-5 text-slate-500 align-middle">{m.user_email}</td>
-                  <td className="px-4 py-5 align-middle"><StatusBadge status={m.status} /></td>
-                  <td className="px-4 py-5 align-middle">
+                  <td className="px-4 py-3 text-muted">{m.user_email}</td>
+                  <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
+                  <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {m.roles.length > 0
                         ? m.roles.map((r) => (
                             <span key={r} className="rounded-md bg-brand-light px-2 py-0.5 text-xs font-medium text-brand">{r}</span>
                           ))
-                        : <span className="text-xs text-slate-400">-</span>}
+                        : <span className="text-xs text-muted">-</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-5 align-middle">
+                  <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {m.permissions.length > 0
                         ? m.permissions.slice(0, 3).map((p) => (
-                            <span key={p} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{p}</span>
+                            <span key={p} className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">{p}</span>
                           ))
-                        : <span className="text-xs text-slate-400">-</span>}
+                        : <span className="text-xs text-muted">-</span>}
                       {m.permissions.length > 3 && (
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">+{m.permissions.length - 3}</span>
+                        <span className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">+{m.permissions.length - 3}</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-5 align-middle">
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => toggleStatus(m.user_id, m.status)}
                       className={cn(
@@ -1476,7 +1458,6 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [view, setView] = useState<ViewKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [secretModal, setSecretModal] = useState<{ clientId: string; clientSecret: string } | null>(null);
   const [secretsVersion, setSecretsVersion] = useState(0);
@@ -1642,141 +1623,106 @@ export default function App() {
     );
   }
 
-  const viewMeta: Record<ViewKey, { title: string; subtitle: string; icon: React.ElementType }> = {
-    dashboard: { title: "仪表盘", subtitle: "系统概览与统计数据", icon: LayoutDashboard },
-    applications: { title: "应用管理", subtitle: "管理 OAuth 接入系统", icon: Globe },
-    users: { title: "用户管理", subtitle: "管理全局用户状态", icon: Users },
-    "login-methods": { title: "登录方式", subtitle: "配置应用的登录方式", icon: Key },
-    secrets: { title: "密钥管理", subtitle: "管理应用的密钥", icon: Shield },
-    roles: { title: "角色管理", subtitle: "管理应用角色", icon: List },
-    permissions: { title: "权限管理", subtitle: "管理应用权限与角色分配", icon: Key },
-    "app-users": { title: "应用用户", subtitle: "管理应用用户与角色", icon: Users },
-  };
-
-  const currentView = viewMeta[view] ?? viewMeta.dashboard;
-
   if (!authenticated) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f7f8] text-slate-900">
-      <div
+    <div className="flex min-h-screen bg-surface">
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <aside
         className={cn(
-          "min-h-screen md:grid",
-          sidebarCollapsed ? "md:grid-cols-[88px_minmax(0,1fr)]" : "md:grid-cols-[272px_minmax(0,1fr)]",
+          "fixed inset-y-0 left-0 z-40 w-60 bg-sidebar text-white transition-transform lg:static lg:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <aside
-          className={cn(
-            "border-b border-slate-200 bg-white md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r",
-            sidebarCollapsed && "md:px-0",
-          )}
-        >
-          <div className="flex items-center justify-between px-4 py-4 md:px-5">
-            <div className={cn("min-w-0", sidebarCollapsed && "md:hidden")}>
-              <div className="truncate whitespace-nowrap text-[1.15rem] leading-tight font-bold text-slate-950">
-                Passport 管理台
-              </div>
-              <div className="mt-2 text-sm text-slate-500">统一认证管理</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 md:hidden"
-                onClick={() => setSidebarOpen((v) => !v)}
-              >
-                {sidebarOpen ? <ChevronLeft className="size-5" /> : <ChevronRight className="size-5" />}
-              </button>
-              <button
-                type="button"
-                className="hidden size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 md:inline-flex"
-                onClick={() => setSidebarCollapsed((v) => !v)}
-              >
-                {sidebarCollapsed ? <ChevronRight className="size-5" /> : <ChevronLeft className="size-5" />}
-              </button>
-            </div>
+        <div className="flex h-full flex-col p-4">
+          <div className="mb-6 flex items-center gap-2.5">
+            <Shield size={24} className="text-brand" />
+            <span className="text-lg font-bold">Passport</span>
           </div>
-
-          <div className={cn("border-t border-slate-100 px-3 pb-4 pt-3 md:border-t-0", !sidebarOpen && "hidden md:block")}>
-            <div className={cn("mb-3 px-3 text-xs font-semibold tracking-[0.14em] text-slate-400", sidebarCollapsed && "md:hidden")}>
-              管理导航
-            </div>
-            <nav className="grid gap-1.5">
-              {NAV_ITEMS.map((item) => (
-                <SidebarItem
-                  key={item.key}
-                  active={item.key === view || (item.key === "applications" && !!selectedApp)}
-                  icon={item.icon}
-                  label={item.label}
-                  collapsed={sidebarCollapsed}
-                  onClick={() => { navigate(item.key); setSidebarOpen(false); }}
-                />
-              ))}
-            </nav>
-
+          {authenticated && userEmail && (
+            <p className="mb-4 text-xs text-gray-500 truncate">{userEmail}</p>
+          )}
+          <nav className="flex-1 space-y-1">
+            {NAV_ITEMS.map((item) => (
+              <SidebarItem
+                key={item.key}
+                active={
+                  item.key === view ||
+                  (item.key === "applications" && !!selectedApp)
+                }
+                icon={item.icon}
+                label={item.label}
+                onClick={() => navigate(item.key)}
+              />
+            ))}
             {selectedApp && (
-              <>
-                <div className="my-5 border-t border-slate-200" />
-                <div className={cn("mb-3 px-3 text-xs font-semibold tracking-[0.14em] text-slate-400", sidebarCollapsed && "md:hidden")}>
-                  当前应用
-                </div>
+              <div className="mx-2 mt-1">
                 <button
-                  type="button"
                   onClick={() => openAppDetail(selectedApp)}
-                  className={cn(
-                    "flex h-14 w-full items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
-                    sidebarCollapsed ? "justify-center md:px-0" : "",
-                    "text-slate-700 hover:bg-slate-50",
-                  )}
-                  title={sidebarCollapsed ? selectedApp.name : undefined}
+                  className="flex w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-sidebar-hover hover:text-white"
                 >
-                  <span className="shrink-0 text-[#1a73e8]"><Globe className="size-5" /></span>
-                  {!sidebarCollapsed && <span className="truncate">{selectedApp.name}</span>}
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand/20">
+                    <Globe size={13} className="text-brand" />
+                  </div>
+                  <span className="truncate">{selectedApp.name}</span>
+                  <ChevronRight size={14} className="ml-auto shrink-0 text-gray-500" />
                 </button>
-              </>
+              </div>
             )}
-
-            <div className="my-5 border-t border-slate-200" />
+          </nav>
+          <div className="border-t border-gray-700 pt-3">
             <button
-              type="button"
-              onClick={clearAuth}
-              className={cn(
-                "flex h-14 w-full items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
-                sidebarCollapsed ? "justify-center md:px-0" : "",
-                "text-slate-700 hover:bg-slate-50",
-              )}
-              title={sidebarCollapsed ? "退出登录" : undefined}
+              onClick={() => {
+                clearAuth();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-sidebar-hover hover:text-white"
             >
-              <span className="shrink-0 text-slate-700"><LogOut className="size-5" /></span>
-              {!sidebarCollapsed && <span>退出登录</span>}
+              <LogOut size={16} />
+              退出登录
             </button>
           </div>
-        </aside>
+        </div>
+      </aside>
 
-        <div className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <currentView.icon className="size-6 text-[#1a73e8]" />
-                  <h1 className="text-[2rem] leading-none font-bold text-slate-950">{currentView.title}</h1>
-                </div>
-                <div className="mt-2 text-sm text-slate-500">{currentView.subtitle}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => load()}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                >
-                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                  刷新
-                </button>
-              </div>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex items-center justify-between border-b border-border bg-white px-4 py-3 lg:px-6">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-1.5 hover:bg-surface lg:hidden">
+              <Menu size={20} />
+            </button>
+            <div>
+              <h1 className="text-lg font-bold">
+                {view === "dashboard" && "仪表盘"}
+                {view === "applications" && "应用管理"}
+                {view === "users" && "用户管理"}
+                {selectedApp && ["login-methods", "roles", "permissions", "app-users"].includes(view) && selectedApp.name}
+              </h1>
+              <p className="text-xs text-muted">
+                {view === "dashboard" && "系统概览与统计数据"}
+                {view === "applications" && "管理 OAuth 接入系统"}
+                {view === "users" && "管理全局用户状态"}
+                {view === "login-methods" && "配置应用的登录方式"}
+                {view === "roles" && "管理应用角色"}
+                {view === "permissions" && "管理应用权限与角色分配"}
+                {view === "app-users" && "管理应用用户与角色"}
+              </p>
             </div>
-          </header>
+          </div>
+          <button
+            onClick={() => load()}
+            className="rounded-lg p-2 hover:bg-surface"
+            title="刷新数据"
+          >
+            <RefreshCw size={18} className={loading ? "animate-spin text-muted" : "text-muted"} />
+          </button>
+        </header>
 
-          <main className="space-y-5 p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {view === "dashboard" && (
             <DashboardView applications={applications} users={users} onNavigate={navigate} onSelectApp={openAppDetail} />
           )}
@@ -1826,7 +1772,6 @@ export default function App() {
             </AppDetailLayout>
           )}
         </main>
-        </div>
       </div>
 
       <ToastContainer items={toasts} />
