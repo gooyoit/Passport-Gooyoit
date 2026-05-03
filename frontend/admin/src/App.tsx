@@ -527,48 +527,57 @@ function ApplicationsView({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-4 py-2 font-medium">名称</th>
-                  <th className="px-4 py-2 font-medium">描述</th>
-                  <th className="px-4 py-2 font-medium">Client ID</th>
-                  <th className="px-4 py-2 font-medium">用户池</th>
-                  <th className="px-4 py-2 font-medium">SSO</th>
-                  <th className="px-4 py-2 font-medium">状态</th>
-                  <th className="px-4 py-2 font-medium"></th>
+              <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3">应用</th>
+                  <th className="px-4 py-3">用户池</th>
+                  <th className="px-4 py-3">SSO</th>
+                  <th className="px-4 py-3">状态</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-slate-200">
                 {applications.map((app) => (
-                  <tr key={app.id} className="hover:bg-surface">
-                    <td className="px-4 py-3 font-medium">{app.name}</td>
-                    <td className="px-4 py-3 text-xs text-muted max-w-48 truncate">{app.description ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-muted">{app.client_id}</code>
-                        <CopyButton text={app.client_id} size={12} />
+                  <tr key={app.id} className="bg-white hover:bg-slate-50">
+                    <td className="px-4 py-4 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-light text-brand">
+                          <Globe size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-900">{app.name}</span>
+                            {app.description && (
+                              <span className="truncate text-xs text-slate-500 max-w-48">· {app.description}</span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1">
+                            <code className="text-xs text-muted font-mono">{app.client_id}</code>
+                            <CopyButton text={app.client_id} size={12} />
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 text-slate-500 align-middle">
                       <span className="text-xs">{app.enable_public_users ? "公共" : "私有"}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 text-slate-500 align-middle">
                       <span className="text-xs">{app.enable_sso ? "开启" : "关闭"}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 align-middle">
                       <StatusBadge status={app.status} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 align-middle">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => openEdit(app)}
-                          className="rounded-md px-2.5 py-1 text-xs text-muted hover:bg-surface hover:text-gray-700"
+                          className="rounded-md px-2.5 py-1 text-xs text-muted hover:bg-slate-100 hover:text-gray-700 transition-colors"
                         >
                           编辑
                         </button>
                         <button
                           onClick={() => onSelect(app)}
-                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light"
+                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand-light transition-colors"
                         >
                           管理
                         </button>
@@ -637,10 +646,10 @@ function UsersView({
   return (
     <Card>
       <SectionHeader title="全局用户" description="管理 Passport 注册用户状态" />
-      <div className="mb-4 flex items-center gap-2">
-        <Search size={16} className="text-muted" />
+      <div className="relative mb-4">
+        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
         <input
-          className={cn(inputCls, "max-w-xs")}
+          className={cn(inputCls, "max-w-xs pl-9")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="搜索邮箱或名称…"
@@ -827,8 +836,8 @@ function SecretsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
-        <p className="text-sm text-muted">
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm text-slate-500">
           <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
           客户端密钥用于后端 Token 交换，请妥善保管。密钥明文仅在创建时展示一次。
         </p>
@@ -841,17 +850,17 @@ function SecretsView({
           暂无密钥，请点击上方"生成新密钥"
         </div>
       ) : (
-        <div className="divide-y divide-border rounded-lg border border-border">
+        <div className="divide-y divide-slate-200 rounded-2xl border border-slate-200">
           {secrets.map((s) => (
-            <div key={s.id} className="flex items-center justify-between px-4 py-3">
+            <div key={s.id} className="flex items-center justify-between px-4 py-3.5">
               <div>
-                <p className="text-sm font-mono text-muted">
+                <p className="text-sm font-mono text-slate-500">
                   {s.secret_prefix && s.secret_suffix
                     ? `${s.secret_prefix}••••••••••••${s.secret_suffix}`
                     : "••••••••••••••••••••••••••••••"}
-                  <span className="ml-2 text-xs text-muted/60">#{s.id}</span>
+                  <span className="ml-2 text-xs text-slate-400">#{s.id}</span>
                 </p>
-                <p className="text-xs text-muted/60">
+                <p className="mt-0.5 text-xs text-slate-400">
                   创建于 {new Date(s.created_at).toLocaleString("zh-CN")}
                 </p>
               </div>
@@ -924,8 +933,8 @@ function LoginMethodsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
-        <p className="text-sm text-muted">
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm text-slate-500">
           <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
           管理该应用支持的登录方式，已启用的方式将在登录页展示。
         </p>
@@ -960,20 +969,20 @@ function LoginMethodsView({
               <div
                 key={m.id}
                 className={cn(
-                  "group rounded-xl border p-4 transition-all",
+                  "group rounded-2xl border p-5 transition-all",
                   m.enabled
                     ? "border-brand/30 bg-brand-light/30"
-                    : "border-border bg-white opacity-60",
+                    : "border-slate-200 bg-white opacity-60",
                 )}
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", meta.bg)}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", meta.bg)}>
                       <MethodIcon size={20} className={meta.color} />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">{methodLabel(m.method)}</p>
-                      <p className="mt-0.5 text-xs text-muted">{methodDescription(m.method)}</p>
+                      <p className="text-sm font-semibold text-slate-900">{methodLabel(m.method)}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{methodDescription(m.method)}</p>
                     </div>
                   </div>
                   <button
@@ -991,12 +1000,6 @@ function LoginMethodsView({
                     />
                   </button>
                 </div>
-                <p className={cn(
-                  "mt-3 text-xs font-medium",
-                  m.enabled ? "text-success" : "text-muted",
-                )}>
-                  {m.enabled ? "已启用" : "未启用"}
-                </p>
               </div>
             );
           })}
@@ -1062,7 +1065,7 @@ function RolesView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">管理应用内的角色，角色可关联权限并分配给用户。</p>
+        <p className="text-sm text-slate-500">管理应用内的角色，角色可关联权限并分配给用户。</p>
         <button onClick={() => setOpen(true)} className={btnPrimary}>
           <Plus size={16} /> 新建角色
         </button>
@@ -1075,31 +1078,33 @@ function RolesView({
             <div
               key={role.id}
               className={cn(
-                "rounded-xl border p-4 transition-all hover:shadow-md",
-                role.is_default ? "border-brand/30 bg-brand-light/20" : "border-border bg-white",
+                "rounded-2xl border p-5 transition-all hover:shadow-md",
+                role.is_default ? "border-brand/30 bg-brand-light/20" : "border-slate-200 bg-white",
               )}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                  role.is_default ? "bg-brand text-white" : "bg-surface text-muted",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                  role.is_default ? "bg-brand text-white" : "bg-slate-100 text-slate-400",
                 )}>
-                  <Shield size={16} />
+                  <Shield size={18} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold truncate">{role.name}</span>
+                    <span className="text-sm font-semibold text-slate-900 truncate">{role.name}</span>
                     {role.is_default && (
                       <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-xs text-white font-medium">
                         默认
                       </span>
                     )}
                   </div>
-                  <code className="mt-0.5 block text-xs text-muted">{role.code}</code>
+                  <div className="mt-1">
+                    <code className="text-xs text-slate-500">{role.code}</code>
+                  </div>
                 </div>
               </div>
               {role.description && (
-                <p className="mt-2.5 text-xs text-muted leading-relaxed">{role.description}</p>
+                <p className="mt-3 text-xs leading-relaxed text-slate-500">{role.description}</p>
               )}
             </div>
           ))}
@@ -1209,7 +1214,7 @@ function PermissionsView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">定义细粒度权限，并将其分配给角色。</p>
+        <p className="text-sm text-slate-500">定义细粒度权限，并将其分配给角色。</p>
         <div className="flex gap-2">
           <button onClick={() => setAssignOpen(true)} className={btnOutline}>
             分配权限
@@ -1224,21 +1229,21 @@ function PermissionsView({
       ) : (
         <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface/50 text-left text-xs text-muted">
-                <th className="px-4 py-2.5 font-medium">名称</th>
-                <th className="px-4 py-2.5 font-medium">标识</th>
-                <th className="px-4 py-2.5 font-medium">描述</th>
+            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">名称</th>
+                <th className="px-4 py-3">标识</th>
+                <th className="px-4 py-3">描述</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-slate-200">
               {perms.map((p) => (
-                <tr key={p.id} className="transition-colors hover:bg-surface/50">
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
-                  <td className="px-4 py-3">
-                    <code className="rounded-md bg-surface px-2 py-0.5 text-xs font-mono text-muted">{p.code}</code>
+                <tr key={p.id} className="bg-white hover:bg-slate-50">
+                  <td className="px-4 py-4 font-medium text-slate-900">{p.name}</td>
+                  <td className="px-4 py-4">
+                    <code className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500">{p.code}</code>
                   </td>
-                  <td className="px-4 py-3 text-muted">{p.description ?? "-"}</td>
+                  <td className="px-4 py-4 text-slate-500">{p.description ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1358,7 +1363,7 @@ function AppUsersView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">已加入此应用的用户列表，可管理角色和状态。</p>
+        <p className="text-sm text-slate-500">已加入此应用的用户列表，可管理角色和状态。</p>
         <button onClick={() => setAssignOpen(true)} className={btnPrimary}>
           <Plus size={16} /> 分配角色
         </button>
@@ -1368,54 +1373,54 @@ function AppUsersView({
       ) : (
         <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface/50 text-left text-xs text-muted">
-                <th className="px-4 py-2.5 font-medium">用户</th>
-                <th className="px-4 py-2.5 font-medium">邮箱</th>
-                <th className="px-4 py-2.5 font-medium">状态</th>
-                <th className="px-4 py-2.5 font-medium">角色</th>
-                <th className="px-4 py-2.5 font-medium">权限</th>
-                <th className="px-4 py-2.5 font-medium">操作</th>
+            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">用户</th>
+                <th className="px-4 py-3">邮箱</th>
+                <th className="px-4 py-3">状态</th>
+                <th className="px-4 py-3">角色</th>
+                <th className="px-4 py-3">权限</th>
+                <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-slate-200">
               {members.map((m) => (
-                <tr key={m.id} className="transition-colors hover:bg-surface/50">
-                  <td className="px-4 py-3">
+                <tr key={m.id} className="bg-white hover:bg-slate-50">
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand text-xs font-semibold">
                         {(m.user_display_name ?? m.user_email ?? "?")[0].toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{m.user_display_name ?? "-"}</p>
-                        <p className="text-xs text-muted">ID: {m.user_id}</p>
+                        <p className="text-sm font-medium text-slate-900">{m.user_display_name ?? "-"}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">ID: {m.user_id}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted">{m.user_email}</td>
-                  <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4 text-slate-500 align-middle">{m.user_email}</td>
+                  <td className="px-4 py-4 align-middle"><StatusBadge status={m.status} /></td>
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.roles.length > 0
                         ? m.roles.map((r) => (
                             <span key={r} className="rounded-md bg-brand-light px-2 py-0.5 text-xs font-medium text-brand">{r}</span>
                           ))
-                        : <span className="text-xs text-muted">-</span>}
+                        : <span className="text-xs text-slate-400">-</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.permissions.length > 0
                         ? m.permissions.slice(0, 3).map((p) => (
-                            <span key={p} className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">{p}</span>
+                            <span key={p} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{p}</span>
                           ))
-                        : <span className="text-xs text-muted">-</span>}
+                        : <span className="text-xs text-slate-400">-</span>}
                       {m.permissions.length > 3 && (
-                        <span className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">+{m.permissions.length - 3}</span>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">+{m.permissions.length - 3}</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4 align-middle">
                     <button
                       onClick={() => toggleStatus(m.user_id, m.status)}
                       className={cn(
