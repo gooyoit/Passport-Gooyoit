@@ -160,7 +160,7 @@ function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }
   useEffect(() => {
     if (!oauth.clientId || !oauth.redirectUri) return;
     api<{ login_methods: string[] }>(
-      `/oauth/authorize?client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent(oauth.redirectUri)}${oauth.state ? `&state=${encodeURIComponent(oauth.state)}` : ""}`
+      `/oauth/login-methods?client_id=${encodeURIComponent(oauth.clientId)}`
     ).then((data) => {
       const methods = (data as Record<string, unknown>).login_methods as string[] ?? [];
       if (methods.length > 0) {
@@ -472,7 +472,7 @@ function RegisterPage({
   useEffect(() => {
     if (!oauth.clientId || !oauth.redirectUri) return;
     api<{ login_methods: string[] }>(
-      `/oauth/authorize?client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent(oauth.redirectUri)}${oauth.state ? `&state=${encodeURIComponent(oauth.state)}` : ""}`
+      `/oauth/login-methods?client_id=${encodeURIComponent(oauth.clientId)}`
     ).then((data) => {
       const methods = (data as Record<string, unknown>).login_methods as string[] ?? [];
       if (methods.length > 0) setLoginMethods(methods);

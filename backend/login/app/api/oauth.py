@@ -45,6 +45,24 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
+@router.get("/login-methods")
+def login_methods(
+    client_id: str,
+    db: Session = Depends(get_db),
+):
+    """Return enabled login methods for an application (JSON only, never redirects)."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    methods = db.scalars(
+        select(ApplicationLoginMethod).where(
+            ApplicationLoginMethod.application_id == application.id,
+            ApplicationLoginMethod.enabled.is_(True),
+        )
+    ).all()
+    return {"login_methods": [m.method for m in methods]}
+
+
 @router.get("/authorize")
 def authorize(
     request: Request,
