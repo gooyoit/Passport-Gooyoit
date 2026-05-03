@@ -21,7 +21,6 @@ import {
   RefreshCw,
   Search,
   Shield,
-  Trash2,
   Users,
   X,
 } from "lucide-react";
