@@ -146,12 +146,12 @@ export default function App() {
     if (!t) return;
     setLoading(true);
     try {
-      const [apps, userList] = await Promise.all([
-        request<Application[]>("/applications", t),
-        request<User[]>("/users", t),
+      const [appsRes, usersRes] = await Promise.all([
+        request<{ items: Application[]; total: number }>("/applications", t),
+        request<{ items: User[]; total: number }>("/users", t),
       ]);
-      setApplications(apps);
-      setUsers(userList);
+      setApplications(appsRes.items);
+      setUsers(usersRes.items);
       setAuthenticated(true);
     } catch (err) {
       clearAuth();
