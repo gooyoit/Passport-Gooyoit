@@ -10,7 +10,7 @@ export const userInfoSchema = z.object({
 export const tokenResponseSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
-  refresh_token: z.string(),
+  refresh_token: z.string().optional(),
   expires_in: z.number(),
   user: userInfoSchema,
   roles: z.array(z.string()),
