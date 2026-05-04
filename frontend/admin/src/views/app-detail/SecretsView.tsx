@@ -23,11 +23,11 @@ export default function SecretsView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    request<ClientSecretItem[]>(
+    request<{ items: ClientSecretItem[]; total: number }>(
       `/applications/${appId}/secrets`,
       token,
     ).then((data) => {
-      if (!cancelled) setSecrets(data);
+      if (!cancelled) setSecrets(data.items);
     }).catch((err) => {
       console.error("Failed to load secrets:", err);
     }).finally(() => {

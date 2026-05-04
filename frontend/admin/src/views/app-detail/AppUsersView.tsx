@@ -22,7 +22,7 @@ export default function AppUsersView({
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      request<ApplicationUser[]>(`/applications/${appId}/users`, token),
+      request<{ items: ApplicationUser[]; total: number }>(`/applications/${appId}/users`, token).then(r => r.items),
       request<Role[]>(`/applications/${appId}/roles`, token),
     ])
       .then(([m, r]) => {
