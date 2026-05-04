@@ -1,6 +1,6 @@
-import { ArrowLeft, Copy, Globe, Key, Link2, Shield, Users } from "lucide-react";
+import { ArrowLeft, Globe, Key, Link2, Shield, Users } from "lucide-react";
 import type { Application, ViewKey } from "../types";
-import { Card, StatusBadge, btnOutline, cn } from "../components/ui";
+import { Card, CopyButton, StatusBadge, btnOutline, cn } from "../components/ui";
 
 export default function AppDetailLayout({
   app,
@@ -45,13 +45,7 @@ export default function AppDetailLayout({
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs">
                   <Link2 size={12} />
                   <code className="font-mono">{app.client_id}</code>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(app.client_id)}
-                    className="ml-1 rounded p-0.5 hover:bg-white/20 transition-colors"
-                    title="复制"
-                  >
-                    <Copy size={11} className="text-white/70" />
-                  </button>
+                  <CopyButton text={app.client_id} size={11} className="ml-1 !text-white/70 hover:!bg-white/20" />
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs">
                   <Users size={12} />

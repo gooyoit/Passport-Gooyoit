@@ -112,17 +112,24 @@ export function Field({
 export function CopyButton({ text, size: sz = 14, className: cls }: { text: string; size?: number; className?: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className={cn("rounded p-1 text-muted hover:text-gray-700 hover:bg-surface transition-colors", cls)}
-      title="复制"
-    >
-      {copied ? <CheckCircle size={sz} className="text-success" /> : <Copy size={sz} />}
-    </button>
+    <span className="relative inline-flex">
+      <button
+        onClick={async () => {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+        className={cn("rounded p-1 text-muted hover:text-gray-700 hover:bg-surface transition-colors", cls)}
+        title="复制"
+      >
+        {copied ? <CheckCircle size={sz} className="text-success" /> : <Copy size={sz} />}
+      </button>
+      {copied && (
+        <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white shadow-lg animate-in fade-in">
+          已复制
+        </span>
+      )}
+    </span>
   );
 }
 
