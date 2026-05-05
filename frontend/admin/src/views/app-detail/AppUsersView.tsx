@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import type { ApplicationUser, Role } from "../../types";
 import { request } from "../../lib/api";
-import { EmptyBlock, Field, Modal, StatusBadge, btnPrimary, btnOutline, cn, inputCls } from "../../components/ui";
+import { EmptyBlock, Field, Modal, StatusBadge, ActionButton, ChipButton, btnPrimary, btnOutline } from "../../components/ui";
 
 export default function AppUsersView({
   appId,
@@ -59,80 +59,75 @@ export default function AppUsersView({
     setAssignOpen(false);
   }
 
-  if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;
+  if (loading) return <div className="py-8 text-center text-sm text-slate-400">加载中…</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">已加入此应用的用户列表，可管理角色和状态。</p>
-        <button onClick={() => setAssignOpen(true)} className={btnPrimary}>
+        <p className="text-sm text-slate-500">已加入此应用的用户列表，可管理角色和状态。</p>
+        <ActionButton variant="primary" onClick={() => setAssignOpen(true)}>
           <Plus size={16} /> 分配角色
-        </button>
+        </ActionButton>
       </div>
       {members.length === 0 ? (
         <EmptyBlock text="暂无用户加入此应用" />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface/50 text-left text-xs text-muted">
-                <th className="px-4 py-2.5 font-medium">用户</th>
-                <th className="px-4 py-2.5 font-medium">邮箱</th>
-                <th className="px-4 py-2.5 font-medium">状态</th>
-                <th className="px-4 py-2.5 font-medium">角色</th>
-                <th className="px-4 py-2.5 font-medium">权限</th>
-                <th className="px-4 py-2.5 font-medium">操作</th>
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">用户</th>
+                <th className="px-4 py-3">邮箱</th>
+                <th className="px-4 py-3">状态</th>
+                <th className="px-4 py-3">角色</th>
+                <th className="px-4 py-3">权限</th>
+                <th className="px-4 py-3 min-w-[100px]">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-slate-200">
               {members.map((m) => (
-                <tr key={m.id} className="transition-colors hover:bg-surface/50">
-                  <td className="px-4 py-3">
+                <tr key={m.id} className="bg-white">
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand text-xs font-semibold">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand text-xs font-semibold">
                         {(m.user_display_name ?? m.user_email ?? "?")[0].toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{m.user_display_name ?? "-"}</p>
-                        <p className="text-xs text-muted">ID: {m.user_id}</p>
+                        <p className="text-sm font-medium text-slate-900">{m.user_display_name ?? "-"}</p>
+                        <p className="text-xs text-slate-500">ID: {m.user_id}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted">{m.user_email}</td>
-                  <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4 align-middle text-slate-500">{m.user_email}</td>
+                  <td className="px-4 py-4 align-middle"><StatusBadge status={m.status} /></td>
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.roles.length > 0
                         ? m.roles.map((r) => (
-                            <span key={r} className="rounded-md bg-brand-light px-2 py-0.5 text-xs font-medium text-brand">{r}</span>
+                            <span key={r} className="rounded-lg bg-brand-light px-2 py-0.5 text-xs font-medium text-brand">{r}</span>
                           ))
-                        : <span className="text-xs text-muted">-</span>}
+                        : <span className="text-xs text-slate-400">-</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {m.permissions.length > 0
                         ? m.permissions.slice(0, 3).map((p) => (
-                            <span key={p} className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">{p}</span>
+                            <span key={p} className="rounded-lg bg-slate-50 px-2 py-0.5 text-xs text-slate-500">{p}</span>
                           ))
-                        : <span className="text-xs text-muted">-</span>}
+                        : <span className="text-xs text-slate-400">-</span>}
                       {m.permissions.length > 3 && (
-                        <span className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted">+{m.permissions.length - 3}</span>
+                        <span className="rounded-lg bg-slate-50 px-2 py-0.5 text-xs text-slate-400">+{m.permissions.length - 3}</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <button
+                  <td className="px-4 py-4 align-middle">
+                    <ChipButton
+                      danger={m.status === "active"}
                       onClick={() => toggleStatus(m.user_id, m.status)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                        m.status === "active"
-                          ? "bg-danger-light text-danger hover:bg-danger hover:text-white"
-                          : "bg-success-light text-success hover:bg-success hover:text-white",
-                      )}
                     >
                       {m.status === "active" ? "禁用" : "启用"}
-                    </button>
+                    </ChipButton>
                   </td>
                 </tr>
               ))}
@@ -145,6 +140,7 @@ export default function AppUsersView({
         open={assignOpen}
         onClose={() => setAssignOpen(false)}
         title="为用户分配角色"
+        subtitle="将角色绑定到指定用户"
         actions={
           <>
             <button onClick={() => setAssignOpen(false)} className={btnOutline}>取消</button>
@@ -155,14 +151,14 @@ export default function AppUsersView({
         <Field label="用户 ID">
           <input
             type="number"
-            className={inputCls}
+            className="app-input"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             placeholder="输入用户 ID"
           />
         </Field>
         <Field label="选择角色">
-          <select className={inputCls} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+          <select className="app-input" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
             <option value="">请选择…</option>
             {roles.filter((r) => r.code !== "super_admin").map((r) => (
               <option key={r.id} value={r.id}>{r.name} ({r.code})</option>

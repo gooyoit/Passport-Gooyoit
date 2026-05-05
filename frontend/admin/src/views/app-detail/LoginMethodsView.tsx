@@ -68,18 +68,18 @@ export default function LoginMethodsView({
   const existingKeys = new Set(methods.map((m) => m.method));
   const missing = allMethods.filter((m) => !existingKeys.has(m));
 
-  if (loading) return <div className="py-8 text-center text-sm text-muted">加载中…</div>;
+  if (loading) return <div className="py-8 text-center text-sm text-slate-400">加载中…</div>;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 px-4 py-3">
-        <p className="text-sm text-muted">
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm text-slate-500">
           <Info size={14} className="mr-1.5 inline-block align-[-2px]" />
           管理该应用支持的登录方式，已启用的方式将在登录页展示。
         </p>
         {missing.length > 0 && (
           <select
-            className="rounded-lg border border-brand/30 bg-white px-3 py-1.5 text-sm text-brand outline-none hover:border-brand focus:ring-2 focus:ring-brand/20"
+            className="h-11 rounded-xl border border-brand/30 bg-white px-3 text-sm text-brand outline-none hover:border-brand focus:ring-2 focus:ring-brand/20"
             defaultValue=""
             onChange={(e) => {
               if (e.target.value) addMethod(e.target.value);
@@ -102,26 +102,26 @@ export default function LoginMethodsView({
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {methods.map((m) => {
-            const meta = METHOD_ICONS[m.method] ?? { icon: Key, color: "text-muted", bg: "bg-surface" };
+            const meta = METHOD_ICONS[m.method] ?? { icon: Key, color: "text-slate-400", bg: "bg-slate-50" };
             const MethodIcon = meta.icon;
             return (
               <div
                 key={m.id}
                 className={cn(
-                  "group rounded-xl border p-4 transition-all",
+                  "group rounded-2xl border p-4 transition-all",
                   m.enabled
                     ? "border-brand/30 bg-brand-light/30"
-                    : "border-border bg-white opacity-60",
+                    : "border-slate-200 bg-white opacity-60",
                 )}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", meta.bg)}>
+                    <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", meta.bg)}>
                       <MethodIcon size={20} className={meta.color} />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">{methodLabel(m.method)}</p>
-                      <p className="mt-0.5 text-xs text-muted">{methodDescription(m.method)}</p>
+                      <p className="text-sm font-semibold text-slate-900">{methodLabel(m.method)}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{methodDescription(m.method)}</p>
                     </div>
                   </div>
                   <button
@@ -141,7 +141,7 @@ export default function LoginMethodsView({
                 </div>
                 <p className={cn(
                   "mt-3 text-xs font-medium",
-                  m.enabled ? "text-success" : "text-muted",
+                  m.enabled ? "text-success" : "text-slate-400",
                 )}>
                   {m.enabled ? "已启用" : "未启用"}
                 </p>

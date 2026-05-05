@@ -3,9 +3,9 @@ export function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 export function statusColor(status: string): string {
-  if (status === "active") return "text-success bg-success-light";
-  if (status === "disabled") return "text-muted";
-  return "text-warning bg-warning-light";
+  if (status === "active") return "bg-sky-50 text-sky-700";
+  if (status === "disabled") return "bg-slate-100 text-slate-600";
+  return "bg-amber-50 text-amber-700";
 }
 
 export function statusLabel(status: string): string {

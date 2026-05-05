@@ -1,6 +1,6 @@
 import { ArrowLeft, Globe, Key, Link2, Shield, Users } from "lucide-react";
 import type { Application, ViewKey } from "../types";
-import { Card, CopyButton, StatusBadge, btnOutline, cn } from "../components/ui";
+import { ActionButton, CopyButton } from "../components/ui";
 
 export default function AppDetailLayout({
   app,
@@ -24,21 +24,26 @@ export default function AppDetailLayout({
     { key: "permissions", label: "权限", icon: Key },
     { key: "app-users", label: "应用用户", icon: Users },
   ];
+
+  const statusLabel = app.status === "active" ? "正常" : app.status === "disabled" ? "已禁用" : app.status;
+
   return (
     <div className="space-y-5">
-      <button onClick={onBack} className={cn(btnOutline, "text-xs gap-1.5")}>
+      <ActionButton variant="secondary" onClick={onBack} className="gap-1.5">
         <ArrowLeft size={14} /> 返回应用列表
-      </button>
-      <Card className="overflow-hidden p-0">
+      </ActionButton>
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
         <div className="bg-gradient-to-r from-brand to-brand-dark px-6 py-5 text-white">
           <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
+            <div className="flex size-14 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
               <Globe size={28} />
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold truncate">{app.name}</h2>
-                <StatusBadge status={app.status} />
+                <h2 className="truncate text-xl font-bold">{app.name}</h2>
+                <span className="inline-flex items-center justify-center rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
+                  {statusLabel}
+                </span>
               </div>
               <p className="mt-1 text-sm text-white/70">{app.description ?? "暂无描述"}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -61,7 +66,7 @@ export default function AppDetailLayout({
             </div>
           </div>
         </div>
-        <div className="border-b border-border px-6 pt-3">
+        <div className="border-b border-slate-200 px-6 pt-3">
           <div className="flex gap-1">
             {tabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -69,12 +74,11 @@ export default function AppDetailLayout({
                 <button
                   key={tab.key}
                   onClick={() => onTabChange(tab.key)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors",
+                  className={
                     activeTab === tab.key
-                      ? "bg-surface text-brand border-b-2 border-brand -mb-px"
-                      : "text-muted hover:text-[#17202a] hover:bg-surface/50",
-                  )}
+                      ? "flex items-center gap-1.5 rounded-t-lg border-b-2 border-brand bg-surface px-4 py-2.5 -mb-px text-sm font-medium text-brand"
+                      : "flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  }
                 >
                   <TabIcon size={15} />
                   {tab.label}
@@ -84,7 +88,7 @@ export default function AppDetailLayout({
           </div>
         </div>
         <div className="p-5">{children}</div>
-      </Card>
+      </div>
     </div>
   );
 }
