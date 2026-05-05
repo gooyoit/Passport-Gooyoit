@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertCircle,
-  CheckCircle,
+  ChevronLeft,
   ChevronRight,
   Globe,
   LayoutDashboard,
@@ -32,7 +31,20 @@ import RolesView from "./views/app-detail/RolesView";
 import PermissionsView from "./views/app-detail/PermissionsView";
 import AppUsersView from "./views/app-detail/AppUsersView";
 
-/* ─── Toast ──────────────────────────────────────────── */
+/* ─── View metadata ────────────────────────────────── */
+
+const viewMeta: Record<string, { title: string; subtitle: string; icon: React.ElementType }> = {
+  dashboard: { title: "仪表盘", subtitle: "系统概览与统计数据", icon: LayoutDashboard },
+  applications: { title: "应用管理", subtitle: "管理 OAuth 接入系统", icon: Globe },
+  users: { title: "用户管理", subtitle: "管理全局用户状态", icon: Users },
+  "login-methods": { title: "登录方式", subtitle: "配置应用的登录方式", icon: Shield },
+  secrets: { title: "密钥管理", subtitle: "管理应用密钥", icon: Shield },
+  roles: { title: "角色", subtitle: "管理应用角色", icon: Shield },
+  permissions: { title: "权限", subtitle: "管理应用权限与角色分配", icon: Shield },
+  "app-users": { title: "应用用户", subtitle: "管理应用用户与角色", icon: Users },
+};
+
+/* ─── Toast ────────────────────────────────────────── */
 
 interface ToastItem {
   id: number;
@@ -50,11 +62,10 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
         <div
           key={t.id}
           className={cn(
-            "toast-enter flex items-center gap-2 rounded-lg px-4 py-3 text-sm shadow-lg",
-            t.type === "error" ? "bg-danger-light text-danger" : "bg-success-light text-success",
+            "toast-enter rounded-2xl px-4 py-3 text-sm font-medium shadow-lg",
+            t.type === "success" ? "bg-slate-900 text-white" : "bg-brand text-white",
           )}
         >
-          {t.type === "error" ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
           {t.message}
         </div>
       ))}
@@ -62,7 +73,7 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
   );
 }
 
-/* ─── Sidebar ───────────────────────────────────────────────── */
+/* ─── Sidebar ──────────────────────────────────────── */
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: React.ElementType }[] = [
   { key: "dashboard", label: "仪表盘", icon: LayoutDashboard },
@@ -74,30 +85,33 @@ function SidebarItem({
   active,
   icon: Icon,
   label,
+  collapsed,
   onClick,
 }: {
   active: boolean;
   icon: React.ElementType;
   label: string;
+  collapsed: boolean;
   onClick: () => void;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-        active
-          ? "bg-sidebar-active text-white"
-          : "text-gray-400 hover:bg-sidebar-hover hover:text-white",
+        "flex h-14 items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
+        collapsed ? "justify-center md:px-0" : "",
+        active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50",
       )}
+      title={collapsed ? label : undefined}
     >
-      <Icon size={18} />
-      {label}
+      <span className="shrink-0 text-slate-700"><Icon size={20} /></span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </button>
   );
 }
 
-/* ─── Main App ──────────────────────────────────────────────── */
+/* ─── Main App ─────────────────────────────────────── */
 
 export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -115,7 +129,9 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [view, setView] = useState<ViewKey>("dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [secretModal, setSecretModal] = useState<{ clientId: string; clientSecret: string } | null>(null);
   const [secretsVersion, setSecretsVersion] = useState(0);
@@ -123,7 +139,6 @@ export default function App() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const toast = useCallback((message: string, type: "error" | "success" = "error") => {
     const id = ++toastId;
@@ -233,7 +248,7 @@ export default function App() {
   const navigate = useCallback(
     (key: ViewKey) => {
       setView(key);
-      setSidebarOpen(false);
+      setMobileSidebarOpen(false);
     },
     [],
   );
@@ -241,7 +256,7 @@ export default function App() {
   function openAppDetail(app: Application) {
     setSelectedApp(app);
     setView("login-methods");
-    setSidebarOpen(false);
+    setMobileSidebarOpen(false);
   }
 
   function backToApps() {
@@ -315,151 +330,199 @@ export default function App() {
     return null;
   }
 
+  const currentMeta = viewMeta[view] ?? { title: selectedApp?.name ?? "", subtitle: "", icon: Globe };
+
   return (
-    <div className="flex min-h-screen bg-surface">
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+    <div className="min-h-screen bg-surface text-slate-900">
+      {loading && (
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-1 overflow-hidden bg-transparent">
+          <div className="h-full w-1/3 animate-[loading_1.2s_ease-in-out_infinite] rounded-r-full bg-brand" />
+        </div>
       )}
 
-      <aside
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
+      <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 bg-sidebar text-white transition-transform lg:static lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          "min-h-screen md:grid",
+          sidebarCollapsed ? "md:grid-cols-[88px_minmax(0,1fr)]" : "md:grid-cols-[272px_minmax(0,1fr)]",
         )}
       >
-        <div className="flex h-full flex-col p-4">
-          <div className="mb-6 flex items-center gap-2.5">
-            <Shield size={24} className="text-brand" />
-            <span className="text-lg font-bold">Passport</span>
-          </div>
-          {authenticated && userEmail && (
-            <p className="mb-4 text-xs text-gray-500 truncate">{userEmail}</p>
+        {/* ─── Sidebar ──────────────────────────────── */}
+        <aside
+          className={cn(
+            "border-b border-slate-200 bg-white md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r",
+            sidebarCollapsed && "md:px-0",
+            mobileSidebarOpen ? "fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200" : "hidden md:block",
           )}
-          <nav className="flex-1 space-y-1">
-            {NAV_ITEMS.map((item) => (
-              <SidebarItem
-                key={item.key}
-                active={
-                  item.key === view ||
-                  (item.key === "applications" && !!selectedApp)
-                }
-                icon={item.icon}
-                label={item.label}
-                onClick={() => navigate(item.key)}
-              />
-            ))}
-            {selectedApp && (
-              <div className="mx-2 mt-1">
-                <button
-                  onClick={() => openAppDetail(selectedApp)}
-                  className="flex w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-sidebar-hover hover:text-white"
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand/20">
-                    <Globe size={13} className="text-brand" />
-                  </div>
-                  <span className="truncate">{selectedApp.name}</span>
-                  <ChevronRight size={14} className="ml-auto shrink-0 text-gray-500" />
-                </button>
+        >
+          <div className="flex items-center justify-between px-4 py-4 md:px-5">
+            <div className={cn("min-w-0", sidebarCollapsed && "md:hidden")}>
+              <div className="flex items-center gap-2.5 truncate whitespace-nowrap text-[1.15rem] leading-tight font-bold text-slate-950">
+                <Shield size={22} className="shrink-0 text-brand" />
+                Passport
               </div>
-            )}
-          </nav>
-          <div className="border-t border-gray-700 pt-3">
-            <button
-              onClick={() => {
-                clearAuth();
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-sidebar-hover hover:text-white"
-            >
-              <LogOut size={16} />
-              退出登录
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border bg-white px-4 py-3 lg:px-6">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-1.5 hover:bg-surface lg:hidden">
-              <Menu size={20} />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold">
-                {view === "dashboard" && "仪表盘"}
-                {view === "applications" && "应用管理"}
-                {view === "users" && "用户管理"}
-                {selectedApp && ["login-methods", "roles", "permissions", "app-users"].includes(view) && selectedApp.name}
-              </h1>
-              <p className="text-xs text-muted">
-                {view === "dashboard" && "系统概览与统计数据"}
-                {view === "applications" && "管理 OAuth 接入系统"}
-                {view === "users" && "管理全局用户状态"}
-                {view === "login-methods" && "配置应用的登录方式"}
-                {view === "roles" && "管理应用角色"}
-                {view === "permissions" && "管理应用权限与角色分配"}
-                {view === "app-users" && "管理应用用户与角色"}
-              </p>
+              <div className="mt-2 text-sm text-slate-500">统一认证管理台</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 md:hidden"
+                onClick={() => setMobileSidebarOpen(false)}
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <button
+                type="button"
+                className="hidden size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 md:inline-flex"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+              >
+                {sidebarCollapsed ? <ChevronRight className="size-5" /> : <ChevronLeft className="size-5" />}
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => load()}
-            className="rounded-lg p-2 hover:bg-surface"
-            title="刷新数据"
-          >
-            <RefreshCw size={18} className={loading ? "animate-spin text-muted" : "text-muted"} />
-          </button>
-        </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {view === "dashboard" && (
-            <DashboardView applications={applications} users={users} onNavigate={navigate} onSelectApp={openAppDetail} />
+          {authenticated && userEmail && (
+            <div className={cn("px-5 pb-3 text-sm text-slate-500", sidebarCollapsed && "md:hidden")}>
+              {userEmail}
+            </div>
           )}
-          {view === "applications" && (
-            <ApplicationsView
-              applications={applications}
-              onLoad={load}
-              onCreate={(name, uris, sso, pub, desc) => createApplication(name, uris, sso, pub, desc).catch((e) => toast(e.message))}
-              onUpdate={updateApplication}
-              onRegenerateSecret={regenerateSecret}
-              onSelect={openAppDetail}
-              canCreate={isSuperAdmin}
-            />
-          )}
-          {view === "users" && (
-            <UsersView users={users} onToggleStatus={toggleUserStatus} />
-          )}
-          {selectedApp && view === "login-methods" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} />
-            </AppDetailLayout>
-          )}
-          {selectedApp && view === "secrets" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <SecretsView
-                appId={selectedApp.id}
-                token={accessToken ?? ""}
-                version={secretsVersion}
-                onRegenerate={() => regenerateSecret(selectedApp.id, selectedApp.client_id)}
-                onDelete={(secretId) => deleteSecret(selectedApp.id, secretId)}
+
+          <div className={cn("border-t border-slate-100 px-3 pb-4 pt-3 md:border-t-0", !mobileSidebarOpen && "hidden md:block", mobileSidebarOpen && "!block")}>
+            <div className={cn("mb-3 px-3 text-xs font-semibold tracking-[0.14em] text-slate-400", sidebarCollapsed && "md:hidden")}>
+              管理导航
+            </div>
+            <nav className="grid gap-1.5">
+              {NAV_ITEMS.map((item) => (
+                <SidebarItem
+                  key={item.key}
+                  active={
+                    item.key === view ||
+                    (item.key === "applications" && !!selectedApp)
+                  }
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={sidebarCollapsed}
+                  onClick={() => navigate(item.key)}
+                />
+              ))}
+              {selectedApp && (
+                <button
+                  type="button"
+                  onClick={() => openAppDetail(selectedApp)}
+                  className={cn(
+                    "flex h-14 items-center gap-3 rounded-2xl px-4 text-left text-[1.05rem] font-medium transition",
+                    sidebarCollapsed ? "justify-center md:px-0" : "",
+                    "bg-brand-light text-brand",
+                  )}
+                >
+                  <Globe size={20} />
+                  {!sidebarCollapsed && <span className="truncate">{selectedApp.name}</span>}
+                </button>
+              )}
+            </nav>
+
+            <div className="my-5 border-t border-slate-200" />
+
+            <button
+              type="button"
+              onClick={clearAuth}
+              className={cn(
+                "flex h-14 items-center gap-3 rounded-2xl px-4 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50",
+                sidebarCollapsed && "md:justify-center md:px-0",
+              )}
+            >
+              <LogOut size={18} />
+              {!sidebarCollapsed && "退出登录"}
+            </button>
+          </div>
+        </aside>
+
+        {/* ─── Main content ────────────────────────── */}
+        <div className="min-w-0">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 lg:hidden"
+                >
+                  <Menu size={20} />
+                </button>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <currentMeta.icon className="size-6 text-brand" />
+                    <h1 className="text-[2rem] leading-none font-bold text-slate-950">{currentMeta.title}</h1>
+                  </div>
+                  <div className="mt-2 text-sm text-slate-500">{currentMeta.subtitle}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => load()}
+                className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+                title="刷新数据"
+              >
+                <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+              </button>
+            </div>
+          </header>
+
+          <main className="space-y-5 p-4 md:p-6">
+            {view === "dashboard" && (
+              <DashboardView applications={applications} users={users} onNavigate={navigate} onSelectApp={openAppDetail} />
+            )}
+            {view === "applications" && (
+              <ApplicationsView
+                applications={applications}
+                onLoad={load}
+                onCreate={(name, uris, sso, pub, desc) => createApplication(name, uris, sso, pub, desc).catch((e) => toast(e.message))}
+                onUpdate={updateApplication}
+                onRegenerateSecret={regenerateSecret}
+                onDeleteSecret={deleteSecret}
+                onSelect={openAppDetail}
+                canCreate={isSuperAdmin}
               />
-            </AppDetailLayout>
-          )}
-          {selectedApp && view === "roles" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <RolesView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
-            </AppDetailLayout>
-          )}
-          {selectedApp && view === "permissions" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <PermissionsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
-            </AppDetailLayout>
-          )}
-          {selectedApp && view === "app-users" && (
-            <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <AppUsersView appId={selectedApp.id} token={accessToken ?? ""} />
-            </AppDetailLayout>
-          )}
-        </main>
+            )}
+            {view === "users" && (
+              <UsersView users={users} onToggleStatus={toggleUserStatus} />
+            )}
+            {selectedApp && view === "login-methods" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} />
+              </AppDetailLayout>
+            )}
+            {selectedApp && view === "secrets" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <SecretsView
+                  appId={selectedApp.id}
+                  token={accessToken ?? ""}
+                  version={secretsVersion}
+                  onRegenerate={() => regenerateSecret(selectedApp.id, selectedApp.client_id)}
+                  onDelete={(secretId) => deleteSecret(selectedApp.id, secretId)}
+                />
+              </AppDetailLayout>
+            )}
+            {selectedApp && view === "roles" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <RolesView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
+              </AppDetailLayout>
+            )}
+            {selectedApp && view === "permissions" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <PermissionsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
+              </AppDetailLayout>
+            )}
+            {selectedApp && view === "app-users" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <AppUsersView appId={selectedApp.id} token={accessToken ?? ""} />
+              </AppDetailLayout>
+            )}
+          </main>
+        </div>
       </div>
 
       <ToastContainer items={toasts} />
