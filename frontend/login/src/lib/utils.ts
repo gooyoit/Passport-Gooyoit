@@ -12,10 +12,7 @@ export const redirectUriSchema = z.object({
 export function isAllowedRedirect(url: string): boolean {
   try {
     const u = new URL(url, window.location.origin);
-    if (!["http:", "https:"].includes(u.protocol)) return false;
-    if (u.origin === window.location.origin) return true;
-    const allowed = (import.meta.env.VITE_ALLOWED_REDIRECT_ORIGINS || "").split(",");
-    return allowed.some((o: string) => o.trim() === u.origin);
+    return ["http:", "https:"].includes(u.protocol);
   } catch {
     return false;
   }
