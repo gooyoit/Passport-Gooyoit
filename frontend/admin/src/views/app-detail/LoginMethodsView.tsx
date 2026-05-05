@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Globe, Info, Key, Mail, MessageCircle } from "lucide-react";
+import { Info, Key, Mail } from "lucide-react";
+import { SiGoogle, SiGithub, SiWechat } from "react-icons/si";
 import type { LoginMethod } from "../../types";
 import { request } from "../../lib/api";
 import { methodDescription, methodLabel } from "../../lib/utils";
@@ -7,9 +8,10 @@ import { EmptyBlock, cn } from "../../components/ui";
 
 const METHOD_ICONS: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   email_code: { icon: Mail, color: "text-blue-600", bg: "bg-blue-50" },
-  wechat: { icon: MessageCircle, color: "text-green-600", bg: "bg-green-50" },
-  google: { icon: Globe, color: "text-red-500", bg: "bg-red-50" },
-  github: { icon: Key, color: "text-gray-800", bg: "bg-gray-100" },
+  email_password: { icon: Key, color: "text-blue-600", bg: "bg-blue-50" },
+  wechat: { icon: SiWechat, color: "text-green-500", bg: "bg-green-50" },
+  google: { icon: SiGoogle, color: "text-red-500", bg: "bg-red-50" },
+  github: { icon: SiGithub, color: "text-gray-800", bg: "bg-gray-100" },
 };
 
 export default function LoginMethodsView({
