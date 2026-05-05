@@ -41,14 +41,17 @@ export default function LoginMethodsView({
   useEffect(() => { fetchMethods(); }, [appId, token]);
 
   async function toggle(method: LoginMethod) {
+    setMethods((prev) =>
+      prev.map((m) => (m.id === method.id ? { ...m, enabled: !m.enabled } : m)),
+    );
     try {
       await request(`/applications/${appId}/login-methods`, token, {
         method: "POST",
         body: JSON.stringify({ method: method.method, enabled: !method.enabled }),
       });
-      fetchMethods();
     } catch (e) {
       window.alert((e as Error).message);
+      fetchMethods();
     }
   }
 
