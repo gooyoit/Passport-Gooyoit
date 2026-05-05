@@ -56,7 +56,7 @@ async def token_exchange(payload: TokenExchangeRequest, response: Response) -> T
 @router.post("/token-refresh", response_model=TokenExchangeResponse)
 async def token_refresh(
     response: Response,
-    refresh_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None, alias=ADMIN_REFRESH_TOKEN_COOKIE),
 ) -> TokenExchangeResponse:
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
