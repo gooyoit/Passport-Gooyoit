@@ -17,30 +17,28 @@ const METHOD_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
 export default function LoginMethodsView({
   appId,
   token,
-  onLoad,
 }: {
   appId: number;
   token: string;
-  onLoad: () => void;
 }) {
   const [methods, setMethods] = useState<LoginMethod[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  function fetchMethods() {
     setLoading(true);
     request<LoginMethod[]>(
       `/applications/${appId}/login-methods`,
       token,
     ).then((data) => {
-      if (!cancelled) setMethods(data);
+      setMethods(data);
     }).catch((err) => {
       console.error("Failed to load login methods:", err);
     }).finally(() => {
-      if (!cancelled) setLoading(false);
+      setLoading(false);
     });
-    return () => { cancelled = true; };
-  }, [appId, token]);
+  }
+
+  useEffect(() => { fetchMethods(); }, [appId, token]);
 
   async function toggle(method: LoginMethod) {
     try {
@@ -48,7 +46,7 @@ export default function LoginMethodsView({
         method: "POST",
         body: JSON.stringify({ method: method.method, enabled: !method.enabled }),
       });
-      onLoad();
+      fetchMethods();
     } catch (e) {
       window.alert((e as Error).message);
     }
@@ -60,7 +58,7 @@ export default function LoginMethodsView({
         method: "POST",
         body: JSON.stringify({ method, enabled: true }),
       });
-      onLoad();
+      fetchMethods();
     } catch (e) {
       window.alert((e as Error).message);
     }

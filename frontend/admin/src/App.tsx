@@ -430,7 +430,7 @@ export default function App() {
           )}
           {selectedApp && view === "login-methods" && (
             <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
-              <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} onLoad={load} />
+              <LoginMethodsView appId={selectedApp.id} token={accessToken ?? ""} />
             </AppDetailLayout>
           )}
           {selectedApp && view === "secrets" && (
