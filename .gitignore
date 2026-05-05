@@ -19,6 +19,8 @@ __pycache__/
 *.egg-info/
 passport.db
 .pytest_cache/
+*.log
+logs/
 
 # Node
 node_modules/
