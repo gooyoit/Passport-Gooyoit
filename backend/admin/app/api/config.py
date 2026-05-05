@@ -47,7 +47,7 @@ async def token_exchange(payload: TokenExchangeRequest, response: Response) -> T
         max_age=30 * 24 * 3600,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
     )
     return result
@@ -79,7 +79,7 @@ async def token_refresh(
         max_age=30 * 24 * 3600,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
     )
     return result

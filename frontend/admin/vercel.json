@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://admin-api.gooyoit.com:8443/$1" }
+  ]
+}
