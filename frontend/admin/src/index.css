@@ -3,9 +3,9 @@
 @plugin "tailwindcss-animate";
 
 @theme {
-  --color-brand: #ff4500;
-  --color-brand-dark: #e03d00;
-  --color-brand-light: #fff3ed;
+  --color-brand: #1a73e8;
+  --color-brand-dark: #1557b0;
+  --color-brand-light: #e8f0fe;
   --color-surface: #f6f7f8;
   --color-border: #e2e8f0;
   --color-muted: #64748b;
@@ -42,8 +42,8 @@ select {
 
 .app-input:focus,
 .app-textarea:focus {
-  border-color: #ff4500;
-  box-shadow: 0 0 0 3px rgba(255, 69, 0, 0.12);
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.12);
 }
 
 .app-textarea {
