@@ -161,7 +161,9 @@ export default function ApplicationsView({
                     <td className="px-4 py-4 align-middle">
                       <div className="flex items-center gap-1.5">
                         <ChipButton onClick={() => openEdit(app)}>编辑</ChipButton>
-                        <ChipButton onClick={() => onSelect(app)}>管理</ChipButton>
+                        <button onClick={() => onSelect(app)} className="inline-flex h-8 items-center justify-center rounded-xl bg-brand/10 px-3 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                          管理
+                        </button>
                       </div>
                     </td>
                   </tr>
