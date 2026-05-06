@@ -174,3 +174,20 @@ class UserRole(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class WebAuthnCredential(Base):
+    """Read-only view of WebAuthn credentials created by the login service."""
+
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    credential_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    transports: Mapped[list[str] | None] = mapped_column(JSON)
+    device_name: Mapped[str | None] = mapped_column(String(255))
+    aaguid: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

@@ -156,3 +156,41 @@ class LoginMethodsResponse(BaseModel):
     """Enabled login methods for an application."""
 
     login_methods: list[str]
+
+
+class WebAuthnBeginRequest(BaseModel):
+    client_id: str
+
+
+class WebAuthnBeginResponse(BaseModel):
+    options: dict
+    challenge_id: str
+
+
+class WebAuthnVerifyRequest(BaseModel):
+    client_id: str
+    redirect_uri: HttpUrl
+    state: str | None = None
+    credential: dict
+    challenge_id: str
+
+
+class WebAuthnRegisterBeginRequest(BaseModel):
+    client_id: str
+    email: EmailStr
+    display_name: str | None = None
+
+
+class WebAuthnRegisterBeginResponse(BaseModel):
+    options: dict
+    challenge_id: str
+
+
+class WebAuthnRegisterFinishRequest(BaseModel):
+    client_id: str
+    redirect_uri: HttpUrl
+    state: str | None = None
+    email: EmailStr
+    display_name: str | None = None
+    credential: dict
+    challenge_id: str

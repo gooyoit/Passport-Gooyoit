@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Key,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -30,6 +31,7 @@ import LoginMethodsView from "./views/app-detail/LoginMethodsView";
 import RolesView from "./views/app-detail/RolesView";
 import PermissionsView from "./views/app-detail/PermissionsView";
 import AppUsersView from "./views/app-detail/AppUsersView";
+import PasskeysView from "./views/app-detail/PasskeysView";
 
 /* ─── View metadata ────────────────────────────────── */
 
@@ -42,6 +44,7 @@ const viewMeta: Record<string, { title: string; subtitle: string; icon: React.El
   roles: { title: "角色", subtitle: "管理应用角色", icon: Shield },
   permissions: { title: "权限", subtitle: "管理应用权限与角色分配", icon: Shield },
   "app-users": { title: "应用用户", subtitle: "管理应用用户与角色", icon: Users },
+  passkeys: { title: "Passkey", subtitle: "管理 Passkey 凭证", icon: Key },
 };
 
 /* ─── Toast ────────────────────────────────────────── */
@@ -519,6 +522,11 @@ export default function App() {
             {selectedApp && view === "app-users" && (
               <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
                 <AppUsersView appId={selectedApp.id} token={accessToken ?? ""} />
+              </AppDetailLayout>
+            )}
+            {selectedApp && view === "passkeys" && (
+              <AppDetailLayout app={selectedApp} activeTab={view} onTabChange={setView} onBack={backToApps} showSecretsTab={isSuperAdmin}>
+                <PasskeysView appId={selectedApp.id} token={accessToken ?? ""} />
               </AppDetailLayout>
             )}
           </main>

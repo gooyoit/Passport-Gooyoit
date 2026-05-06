@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Info, Key, Mail } from "lucide-react";
+import { Info, Key, Mail, KeyRound } from "lucide-react";
 import { SiGoogle, SiGithub, SiWechat } from "react-icons/si";
 import type { LoginMethod } from "../../types";
 import { request } from "../../lib/api";
@@ -12,6 +12,7 @@ const METHOD_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   wechat: { icon: SiWechat, color: "text-green-500", bg: "bg-green-50" },
   google: { icon: SiGoogle, color: "text-red-500", bg: "bg-red-50" },
   github: { icon: SiGithub, color: "text-gray-800", bg: "bg-gray-100" },
+  passkey: { icon: KeyRound, color: "text-violet-600", bg: "bg-violet-50" },
 };
 
 export default function LoginMethodsView({
@@ -67,7 +68,7 @@ export default function LoginMethodsView({
     }
   }
 
-  const allMethods = ["email_code", "email_password", "wechat", "google", "github"];
+  const allMethods = ["email_code", "email_password", "wechat", "google", "github", "passkey"];
   const existingKeys = new Set(methods.map((m) => m.method));
   const missing = allMethods.filter((m) => !existingKeys.has(m));
 

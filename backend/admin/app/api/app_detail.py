@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_admin, require_super_admin
-from app.models import ApplicationUser, Role, User, UserRole
-from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate, PaginatedResponse
+from app.models import ApplicationUser, Role, User, UserRole, WebAuthnCredential
+from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate, PaginatedResponse, WebAuthnCredentialRead
 from app.services.permissions import (
     get_effective_permissions,
     get_effective_permissions_for_users,
@@ -150,4 +150,83 @@ def assign_role_to_user(
         except IntegrityError:
             db.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
+    return {"status": "ok"}
+
+
+@router.get("/applications/{application_id}/passkeys", response_model=PaginatedResponse[WebAuthnCredentialRead])
+def list_passkeys(
+    application_id: int,
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[WebAuthnCredentialRead]:
+    """List all Passkey credentials for an application."""
+    app_user_ids = db.scalars(
+        select(ApplicationUser.user_id).where(
+            ApplicationUser.application_id == application_id,
+            ApplicationUser.status == "active",
+        )
+    ).all()
+    if not app_user_ids:
+        return {"items": [], "total": 0}
+
+    base_query = (
+        select(WebAuthnCredential)
+        .where(WebAuthnCredential.user_id.in_(app_user_ids))
+    )
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    creds = db.scalars(
+        base_query
+        .order_by(WebAuthnCredential.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    users_by_id = {
+        u.id: u
+        for u in db.scalars(select(User).where(User.id.in_([c.user_id for c in creds]))).all()
+    }
+    items = [
+        WebAuthnCredentialRead(
+            id=c.id,
+            user_id=c.user_id,
+            user_email=users_by_id[c.user_id].email,
+            user_display_name=users_by_id[c.user_id].display_name,
+            credential_id=c.credential_id,
+            sign_count=c.sign_count,
+            transports=c.transports,
+            device_name=c.device_name,
+            aaguid=c.aaguid,
+            created_at=c.created_at,
+        )
+        for c in creds
+    ]
+    return {"items": items, "total": total}
+
+
+@router.delete("/applications/{application_id}/passkeys/{credential_id}")
+def delete_passkey(
+    application_id: int,
+    credential_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Delete a Passkey credential."""
+    app_user_ids = db.scalars(
+        select(ApplicationUser.user_id).where(
+            ApplicationUser.application_id == application_id,
+        )
+    ).all()
+    if not app_user_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    cred = db.scalar(
+        select(WebAuthnCredential).where(
+            WebAuthnCredential.id == credential_id,
+            WebAuthnCredential.user_id.in_(app_user_ids),
+        )
+    )
+    if cred is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credential not found")
+    db.delete(cred)
+    db.commit()
     return {"status": "ok"}

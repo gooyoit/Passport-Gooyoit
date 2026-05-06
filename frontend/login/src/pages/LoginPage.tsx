@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { GithubIcon as GithubIcon, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { GithubIcon as GithubIcon, ShieldCheck, Eye, EyeOff, KeyRound } from "lucide-react";
 import { FaWeixin } from "react-icons/fa";
 import Showcase from "../components/Showcase";
 import GoogleIcon from "../components/GoogleIcon";
-import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema } from "../lib/utils";
+import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode } from "../lib/utils";
 import { useCaptcha } from "../hooks/useCaptcha";
 
 type FormEvent = React.FormEvent;
@@ -144,6 +144,78 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     }
   }
 
+  async function handlePasskeyLogin() {
+    if (!window.PublicKeyCredential) {
+      setMsg("Your browser does not support Passkeys");
+      return;
+    }
+    setLoading(true);
+    setMsg("");
+    try {
+      const beginR = await api<{ options: Record<string, unknown>; challenge_id: string }>(
+        "/auth/webauthn/login/begin",
+        {
+          method: "POST",
+          body: JSON.stringify({ client_id: oauth.clientId }),
+        },
+      );
+      const serverOptions = beginR.options as unknown as PublicKeyCredentialRequestOptionsJSON;
+      const challengeBuffer = bufferDecode(serverOptions.challenge as string);
+      const allowCreds = (serverOptions.allowCredentials ?? []).map(
+        (c: PublicKeyCredentialDescriptorJSON) => ({
+          id: bufferDecode(c.id).buffer as ArrayBuffer,
+          type: c.type,
+          transports: c.transports,
+        }),
+      );
+      const { extensions: _, userVerification: _uv, ...pkOptions } = serverOptions;
+      void _; void _uv;
+      const pkc = await navigator.credentials.get({
+        publicKey: {
+          ...pkOptions,
+          challenge: challengeBuffer as unknown as BufferSource,
+          allowCredentials: allowCreds as unknown as PublicKeyCredentialDescriptor[],
+        } as PublicKeyCredentialRequestOptions,
+      });
+      if (!pkc) {
+        setMsg("Passkey authentication cancelled");
+        return;
+      }
+      const credential = pkc as PublicKeyCredential;
+      const authResponse = credential.response as AuthenticatorAssertionResponse;
+      const credentialJSON = {
+        id: credential.id,
+        rawId: bufferEncode(new Uint8Array(credential.rawId)),
+        type: credential.type,
+        response: {
+          authenticatorData: bufferEncode(authResponse.authenticatorData),
+          clientDataJSON: bufferEncode(authResponse.clientDataJSON),
+          signature: bufferEncode(authResponse.signature),
+          userHandle: authResponse.userHandle ? bufferEncode(authResponse.userHandle) : null,
+        },
+      };
+      const verifyR = await api<{ redirect_uri: string }>(
+        "/auth/webauthn/login/verify",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            client_id: oauth.clientId,
+            redirect_uri: oauth.redirectUri,
+            state: oauth.state,
+            credential: credentialJSON,
+            challenge_id: beginR.challenge_id,
+          }),
+        },
+      );
+      const parsed = redirectUriSchema.safeParse(verifyR);
+      if (parsed.success) safeRedirect(parsed.data.redirect_uri);
+    } catch (err) {
+      setMsg((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="shell">
       <Showcase />
@@ -270,6 +342,18 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
             <FaWeixin size={18} color="#07C160" />
             <span>{t("login.wechat")}</span>
           </a>
+          )}
+
+          {loginMethods.includes("passkey") && (
+          <button
+            type="button"
+            className="social-btn"
+            onClick={handlePasskeyLogin}
+            disabled={loading}
+          >
+            <KeyRound size={18} />
+            <span>{t("login.passkey", "Passkey")}</span>
+          </button>
           )}
 
           <p className="switch-text">

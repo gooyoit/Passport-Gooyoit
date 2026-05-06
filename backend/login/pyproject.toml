@@ -21,6 +21,8 @@ dependencies = [
     "resend>=2.0.0",
     "sqlalchemy>=2.0.0",
     "uvicorn[standard]>=0.30.0",
+    "webauthn>=2.1.0",
+    "cbor2>=5.6.0",
 ]
 
 [project.optional-dependencies]

@@ -217,3 +217,16 @@ class TokenExchangeResponse(BaseModel):
     user: UserInfo
     roles: list[str]
     permissions: list[str]
+
+
+class WebAuthnCredentialRead(BaseModel):
+    id: int
+    user_id: int
+    user_email: str
+    user_display_name: str | None
+    credential_id: str
+    sign_count: int
+    transports: list[str] | None
+    device_name: str | None
+    aaguid: str | None
+    created_at: datetime

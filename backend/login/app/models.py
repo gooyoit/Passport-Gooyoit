@@ -251,6 +251,22 @@ class EmailVerificationCode(Base):
     )
 
 
+class WebAuthnCredential(TimestampMixin, Base):
+    """Stored WebAuthn credential for passwordless login."""
+
+    __tablename__ = "webauthn_credentials"
+    __table_args__ = (UniqueConstraint("credential_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    credential_id: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    transports: Mapped[list[str] | None] = mapped_column(JSON)
+    device_name: Mapped[str | None] = mapped_column(String(255))
+    aaguid: Mapped[str | None] = mapped_column(String(64))
+
+
 class AuditLog(Base):
     """Security and admin audit event."""
 

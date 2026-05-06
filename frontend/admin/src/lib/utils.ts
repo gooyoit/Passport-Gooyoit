@@ -20,6 +20,7 @@ const METHOD_LABELS: Record<string, string> = {
   wechat: "微信",
   google: "Google",
   github: "GitHub",
+  passkey: "Passkey",
 };
 
 export function methodLabel(method: string): string {
@@ -32,6 +33,7 @@ const METHOD_DESCRIPTIONS: Record<string, string> = {
   wechat: "用户通过微信扫码登录",
   google: "用户通过 Google 账号登录",
   github: "用户通过 GitHub 账号登录",
+  passkey: "使用设备指纹或密码管理器无密码登录",
 };
 
 export function methodDescription(method: string): string {

@@ -1,4 +1,4 @@
-import { ArrowLeft, Globe, Key, Link2, Shield, Users } from "lucide-react";
+import { ArrowLeft, Globe, Key, Link2, Shield, Users, Fingerprint } from "lucide-react";
 import type { Application, ViewKey } from "../types";
 import { ActionButton, CopyButton } from "../components/ui";
 
@@ -23,6 +23,7 @@ export default function AppDetailLayout({
     { key: "roles", label: "角色", icon: Shield },
     { key: "permissions", label: "权限", icon: Key },
     { key: "app-users", label: "应用用户", icon: Users },
+    { key: "passkeys" as ViewKey, label: "Passkeys", icon: Fingerprint },
   ];
 
   const statusLabel = app.status === "active" ? "正常" : app.status === "disabled" ? "已禁用" : app.status;

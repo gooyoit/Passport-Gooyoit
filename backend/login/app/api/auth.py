@@ -19,6 +19,12 @@ from app.schemas import (
     EmailLoginResponse,
     EmailPasswordLoginRequest,
     EmailRegisterRequest,
+    WebAuthnBeginRequest,
+    WebAuthnBeginResponse,
+    WebAuthnVerifyRequest,
+    WebAuthnRegisterBeginRequest,
+    WebAuthnRegisterBeginResponse,
+    WebAuthnRegisterFinishRequest,
 )
 from app.services.auth import complete_email_login, complete_email_register, complete_password_login, issue_email_code
 from app.services.captcha import generate_captcha, verify_captcha
@@ -30,6 +36,12 @@ from app.services.rate_limit import (
     clear_failed_login,
     get_client_ip,
     record_failed_login,
+)
+from app.services.webauthn_service import (
+    begin_authentication,
+    verify_authentication,
+    begin_registration,
+    finish_registration,
 )
 from redis import Redis
 
@@ -207,4 +219,80 @@ def email_register(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
         state=payload.state,
+    )
+
+
+# ─── WebAuthn / Passkey endpoints ─────────────────────────────────────────────
+
+
+@router.post("/webauthn/login/begin", response_model=WebAuthnBeginResponse)
+def webauthn_login_begin(
+    payload: WebAuthnBeginRequest,
+    db: Session = Depends(get_db),
+) -> WebAuthnBeginResponse:
+    """Start a Passkey login by returning a challenge."""
+    options, challenge_id = begin_authentication(db, client_id=payload.client_id)
+    return WebAuthnBeginResponse(options=options, challenge_id=challenge_id)
+
+
+@router.post("/webauthn/login/verify", response_model=EmailLoginResponse)
+def webauthn_login_verify(
+    payload: WebAuthnVerifyRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> EmailLoginResponse:
+    """Verify a Passkey authentication assertion and return an authorization code."""
+    code, state = verify_authentication(
+        db,
+        response,
+        client_id=payload.client_id,
+        redirect_uri=str(payload.redirect_uri),
+        state=payload.state,
+        credential=payload.credential,
+        challenge_id=payload.challenge_id,
+    )
+    return EmailLoginResponse(
+        code=code,
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': code, **({'state': state} if state else {})})}",
+        state=state,
+    )
+
+
+@router.post("/webauthn/register/begin", response_model=WebAuthnRegisterBeginResponse)
+def webauthn_register_begin(
+    payload: WebAuthnRegisterBeginRequest,
+    db: Session = Depends(get_db),
+) -> WebAuthnRegisterBeginResponse:
+    """Start Passkey registration for an existing user."""
+    options, challenge_id = begin_registration(
+        db,
+        client_id=payload.client_id,
+        email=str(payload.email),
+        display_name=payload.display_name,
+    )
+    return WebAuthnRegisterBeginResponse(options=options, challenge_id=challenge_id)
+
+
+@router.post("/webauthn/register/finish", response_model=EmailLoginResponse)
+def webauthn_register_finish(
+    payload: WebAuthnRegisterFinishRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> EmailLoginResponse:
+    """Complete Passkey registration, save the credential, and return an authorization code."""
+    code, state = finish_registration(
+        db,
+        response,
+        client_id=payload.client_id,
+        redirect_uri=str(payload.redirect_uri),
+        state=payload.state,
+        email=str(payload.email),
+        display_name=payload.display_name,
+        credential=payload.credential,
+        challenge_id=payload.challenge_id,
+    )
+    return EmailLoginResponse(
+        code=code,
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': code, **({'state': state} if state else {})})}",
+        state=state,
     )

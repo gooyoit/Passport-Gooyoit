@@ -79,6 +79,7 @@ export type ViewKey =
   | "applications"
   | "users"
   | "login-methods"
+  | "passkeys"
   | "roles"
   | "permissions"
   | "app-users"

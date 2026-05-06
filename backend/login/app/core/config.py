@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     rate_limit_lockout_seconds: int = 900
     sso_session_ttl_seconds: int = 604_800
     log_file: str = "logs/login.log"
+    webauthn_rp_id: str = "localhost"
+    webauthn_rp_name: str = "Gooyoit Passport"
+    webauthn_rp_origin: str = "http://localhost:5173"
 
 
 @lru_cache
