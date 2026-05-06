@@ -160,21 +160,13 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
         },
       );
       const serverOptions = beginR.options as unknown as PublicKeyCredentialRequestOptionsJSON;
-      const challengeBuffer = bufferDecode(serverOptions.challenge as string);
-      const allowCreds = (serverOptions.allowCredentials ?? []).map(
-        (c: PublicKeyCredentialDescriptorJSON) => ({
-          id: bufferDecode(c.id).buffer as ArrayBuffer,
-          type: c.type,
-          transports: c.transports,
-        }),
-      );
-      const { extensions: _, userVerification: _uv, ...pkOptions } = serverOptions;
-      void _; void _uv;
+      const { extensions: _, userVerification: _uv, allowCredentials: _ac, ...pkOptions } = serverOptions;
+      void _; void _uv; void _ac;
       const pkc = await navigator.credentials.get({
         publicKey: {
           ...pkOptions,
-          challenge: challengeBuffer as unknown as BufferSource,
-          allowCredentials: allowCreds as unknown as PublicKeyCredentialDescriptor[],
+          challenge: bufferDecode(serverOptions.challenge as string) as unknown as BufferSource,
+          allowCredentials: [],
         } as PublicKeyCredentialRequestOptions,
       });
       if (!pkc) {
