@@ -39,6 +39,10 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
   } = useCaptcha();
 
   useEffect(() => {
+    document.title = t("login.title", { appName });
+  }, [t, appName]);
+
+  useEffect(() => {
     if (!oauth.clientId || !oauth.redirectUri) return;
     api<{ login_methods: string[] }>(
       `/oauth/login-methods?client_id=${encodeURIComponent(oauth.clientId)}`

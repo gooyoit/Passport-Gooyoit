@@ -15,6 +15,4 @@ i18next.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-document.title = i18next.t("login.title");
-
 export default i18next;
