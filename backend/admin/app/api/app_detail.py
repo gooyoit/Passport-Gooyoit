@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import require_admin, require_super_admin
 from app.models import ApplicationUser, Role, User, UserRole, WebAuthnCredential
-from app.schemas import ApplicationUserRead, ApplicationUserStatusUpdate, PaginatedResponse, WebAuthnCredentialRead
+from app.schemas import (
+    ApplicationUserRead,
+    ApplicationUserStatusUpdate,
+    PaginatedResponse,
+    RoleAssignRequest,
+    WebAuthnCredentialRead,
+)
 from app.services.permissions import (
     get_effective_permissions,
     get_effective_permissions_for_users,
@@ -109,15 +115,15 @@ def update_application_user_status(
     )
 
 
-@router.post("/applications/{application_id}/users/{user_id}/roles/{role_id}")
-def assign_role_to_user(
+@router.put("/applications/{application_id}/users/{user_id}/roles")
+def set_user_roles(
     application_id: int,
     user_id: int,
-    role_id: int,
+    payload: RoleAssignRequest,
     _admin_user_id: int = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
-    """Assign an explicit role to a user."""
+    """Replace the explicit roles of a user within one application."""
     membership = db.scalar(
         select(ApplicationUser).where(
             ApplicationUser.application_id == application_id,
@@ -126,30 +132,39 @@ def assign_role_to_user(
     )
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this application")
-    role = db.get(Role, role_id)
-    if role is None or role.application_id != application_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
-    if role.code == "super_admin":
-        raise HTTPException(status_code=403, detail="Cannot assign super_admin role through this endpoint")
 
-    existing = db.scalar(
+    app_roles = {
+        r.id: r
+        for r in db.scalars(select(Role).where(Role.application_id == application_id)).all()
+    }
+    target_ids = set(payload.role_ids)
+    for role_id in target_ids:
+        role = app_roles.get(role_id)
+        if role is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+        if role.code == "super_admin":
+            raise HTTPException(status_code=403, detail="Cannot assign super_admin role through this endpoint")
+
+    existing = db.scalars(
         select(UserRole).where(
             UserRole.application_id == application_id,
             UserRole.user_id == user_id,
-            UserRole.role_id == role_id,
         )
-    )
-    if existing is None:
-        db.add(
-            UserRole(application_id=application_id, user_id=user_id, role_id=role_id)
-        )
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
+    ).all()
+    existing_ids = {ur.role_id for ur in existing}
+    for ur in existing:
+        role = app_roles.get(ur.role_id)
+        is_super_admin = role is not None and role.code == "super_admin"
+        # super_admin assignments are managed elsewhere and never touched here
+        if not is_super_admin and ur.role_id not in target_ids:
+            db.delete(ur)
+    for role_id in target_ids - existing_ids:
+        db.add(UserRole(application_id=application_id, user_id=user_id, role_id=role_id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data conflict")
     return {"status": "ok"}
 
 

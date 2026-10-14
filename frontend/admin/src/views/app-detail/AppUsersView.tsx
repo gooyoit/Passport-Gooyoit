@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
 import type { ApplicationUser, Role } from "../../types";
 import { request } from "../../lib/api";
-import { EmptyBlock, Field, Modal, StatusBadge, ActionButton, ChipButton, btnPrimary, btnOutline } from "../../components/ui";
+import { EmptyBlock, Field, Modal, StatusBadge, ChipButton, btnPrimary, btnOutline } from "../../components/ui";
 
 export default function AppUsersView({
   appId,
@@ -14,29 +13,25 @@ export default function AppUsersView({
   const [members, setMembers] = useState<ApplicationUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [userId, setUserId] = useState("");
-  const [roleId, setRoleId] = useState("");
+  const [editingUser, setEditingUser] = useState<ApplicationUser | null>(null);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
+
+  function loadMembers() {
+    setLoading(true);
+    request<{ items: ApplicationUser[]; total: number }>(`/applications/${appId}/users`, token)
+      .then((r) => setMembers(r.items))
+      .catch((err) => console.error("Failed to load app users:", err))
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      request<{ items: ApplicationUser[]; total: number }>(`/applications/${appId}/users`, token).then(r => r.items),
-      request<Role[]>(`/applications/${appId}/roles`, token),
-    ])
-      .then(([m, r]) => {
-        if (!cancelled) {
-          setMembers(m);
-          setRoles(r);
-        }
+    request<Role[]>(`/applications/${appId}/roles`, token)
+      .then((r) => {
+        if (!cancelled) setRoles(r);
       })
-      .catch((err) => {
-        console.error("Failed to load app users:", err);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .catch((err) => console.error("Failed to load roles:", err));
+    loadMembers();
     return () => { cancelled = true; };
   }, [appId, token]);
 
@@ -45,18 +40,26 @@ export default function AppUsersView({
       method: "PATCH",
       body: JSON.stringify({ status: currentStatus === "active" ? "disabled" : "active" }),
     });
+    loadMembers();
   }
 
-  async function assignRole() {
-    if (!userId || !roleId) return;
-    await request(
-      `/applications/${appId}/users/${userId}/roles/${roleId}`,
-      token,
-      { method: "POST" },
+  function openRoleEditor(member: ApplicationUser) {
+    setEditingUser(member);
+    setSelectedRoleIds(
+      roles
+        .filter((r) => r.code !== "super_admin" && member.roles.includes(r.code))
+        .map((r) => r.id),
     );
-    setUserId("");
-    setRoleId("");
-    setAssignOpen(false);
+  }
+
+  async function saveRoles() {
+    if (!editingUser) return;
+    await request(`/applications/${appId}/users/${editingUser.user_id}/roles`, token, {
+      method: "PUT",
+      body: JSON.stringify({ role_ids: selectedRoleIds }),
+    });
+    setEditingUser(null);
+    loadMembers();
   }
 
   if (loading) return <div className="py-8 text-center text-sm text-slate-400">加载中…</div>;
@@ -65,9 +68,6 @@ export default function AppUsersView({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">已加入此应用的用户列表，可管理角色和状态。</p>
-        <ActionButton variant="primary" onClick={() => setAssignOpen(true)}>
-          <Plus size={16} /> 分配角色
-        </ActionButton>
       </div>
       {members.length === 0 ? (
         <EmptyBlock text="暂无用户加入此应用" />
@@ -122,12 +122,15 @@ export default function AppUsersView({
                     </div>
                   </td>
                   <td className="px-4 py-4 align-middle">
-                    <ChipButton
-                      danger={m.status === "active"}
-                      onClick={() => toggleStatus(m.user_id, m.status)}
-                    >
-                      {m.status === "active" ? "禁用" : "启用"}
-                    </ChipButton>
+                    <div className="flex gap-2">
+                      <ChipButton onClick={() => openRoleEditor(m)}>角色</ChipButton>
+                      <ChipButton
+                        danger={m.status === "active"}
+                        onClick={() => toggleStatus(m.user_id, m.status)}
+                      >
+                        {m.status === "active" ? "禁用" : "启用"}
+                      </ChipButton>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -137,33 +140,42 @@ export default function AppUsersView({
       )}
 
       <Modal
-        open={assignOpen}
-        onClose={() => setAssignOpen(false)}
-        title="为用户分配角色"
-        subtitle="将角色绑定到指定用户"
+        open={editingUser !== null}
+        onClose={() => setEditingUser(null)}
+        title="管理用户角色"
+        subtitle={editingUser ? editingUser.user_email : undefined}
         actions={
           <>
-            <button onClick={() => setAssignOpen(false)} className={btnOutline}>取消</button>
-            <button onClick={assignRole} className={btnPrimary}>分配</button>
+            <button onClick={() => setEditingUser(null)} className={btnOutline}>取消</button>
+            <button onClick={saveRoles} className={btnPrimary}>保存</button>
           </>
         }
       >
-        <Field label="用户 ID">
-          <input
-            type="number"
-            className="app-input"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="输入用户 ID"
-          />
-        </Field>
-        <Field label="选择角色">
-          <select className="app-input" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-            <option value="">请选择…</option>
+        <Field label={`角色（可多选，当前生效角色已勾选）`}>
+          <div className="max-h-56 space-y-1.5 overflow-y-auto">
+            {roles.filter((r) => r.code !== "super_admin").length === 0 && (
+              <p className="text-xs text-slate-400">此应用还没有角色，请先在"角色权限"页创建。</p>
+            )}
             {roles.filter((r) => r.code !== "super_admin").map((r) => (
-              <option key={r.id} value={r.id}>{r.name} ({r.code})</option>
+              <label
+                key={r.id}
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50"
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 accent-brand"
+                  checked={selectedRoleIds.includes(r.id)}
+                  onChange={(e) =>
+                    setSelectedRoleIds((prev) =>
+                      e.target.checked ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                    )
+                  }
+                />
+                <span className="text-sm text-slate-900">{r.name}</span>
+                <span className="text-xs text-slate-400">{r.code}</span>
+              </label>
             ))}
-          </select>
+          </div>
         </Field>
       </Modal>
     </div>

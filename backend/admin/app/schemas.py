@@ -112,6 +112,12 @@ class RoleCreate(BaseModel):
     is_default: bool = False
 
 
+class RoleAssignRequest(BaseModel):
+    """Replace the explicit roles of one application user."""
+
+    role_ids: list[int]
+
+
 class RoleRead(BaseModel):
     """Role response."""
 
