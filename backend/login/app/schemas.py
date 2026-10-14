@@ -156,6 +156,7 @@ class LoginMethodsResponse(BaseModel):
     """Enabled login methods for an application."""
 
     login_methods: list[str]
+    application_name: str
 
 
 class WebAuthnBeginRequest(BaseModel):

@@ -25,6 +25,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
   const [debugCode, setDebugCode] = useState("");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
   const [emailPasswordEnabled, setEmailPasswordEnabled] = useState(false);
+  const [appName, setAppName] = useState(oauth.appName);
   const {
     captchaKey,
     captchaImage,
@@ -44,6 +45,9 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     ).then((data) => {
       const parsed = loginMethodsSchema.safeParse(data);
       const methods = parsed.success ? parsed.data.login_methods : [];
+      if (parsed.success && parsed.data.application_name) {
+        setAppName(parsed.data.application_name);
+      }
       if (methods.length > 0) {
         setLoginMethods(methods);
         setEmailPasswordEnabled(methods.includes("email_password"));
@@ -217,7 +221,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
             <div className="brand-mark">
               <ShieldCheck size={28} />
             </div>
-            <h1>{t("login.title", { appName: oauth.appName })}</h1>
+            <h1>{t("login.title", { appName })}</h1>
           </div>
 
           <form className="email-form" onSubmit={login}>

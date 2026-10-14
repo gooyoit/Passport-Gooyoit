@@ -61,7 +61,10 @@ def login_methods(
             ApplicationLoginMethod.enabled.is_(True),
         )
     ).all()
-    return LoginMethodsResponse(login_methods=[m.method for m in methods])
+    return LoginMethodsResponse(
+        login_methods=[m.method for m in methods],
+        application_name=application.name,
+    )
 
 
 @router.get("/authorize")

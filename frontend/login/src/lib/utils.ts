@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
-export const loginMethodsSchema = z.object({ login_methods: z.array(z.string()) });
+export const loginMethodsSchema = z.object({
+  login_methods: z.array(z.string()),
+  application_name: z.string().optional(),
+});
 
 export const redirectUriSchema = z.object({
   redirect_uri: z.string().min(1),
