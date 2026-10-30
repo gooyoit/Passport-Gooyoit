@@ -1,5 +1,6 @@
 """Third-party OAuth provider integration using Authlib."""
 
+import os
 from typing import Any
 
 from authlib.integrations.starlette_client import OAuth
@@ -36,10 +37,18 @@ def get_enabled_provider_method(
 
 
 def build_oauth_client(provider: str, config: dict[str, Any] | None):
-    """Build an Authlib OAuth client from application login method config."""
+    """Build an Authlib OAuth client from application login method config.
+
+    client_secret 优先取 config 明文（向后兼容）；否则读 config 里
+    client_secret_env 指向的环境变量，让 secret 不落库。
+    """
     provider_config = config or {}
     client_id = provider_config.get("client_id")
     client_secret = provider_config.get("client_secret")
+    if not client_secret:
+        secret_env_name = provider_config.get("client_secret_env")
+        if secret_env_name:
+            client_secret = os.environ.get(str(secret_env_name))
     if not client_id or not client_secret:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
