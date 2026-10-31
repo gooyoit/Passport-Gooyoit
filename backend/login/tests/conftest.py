@@ -1,5 +1,7 @@
 """Test fixtures."""
 
+import re
+import secrets
 from collections.abc import Generator
 
 import pytest
@@ -8,17 +10,21 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.core.security import hash_secret
 from app.db.session import Base, get_db
 from app.main import app
 from app import models  # noqa: F401
 
 
+def _test_database_url() -> str:
+    """Point the configured database URL at the isolated passport_test schema."""
+    return re.sub(r"/[^/?]+(\?|$)", "/passport_test\\1", settings.database_url)
+
+
 @pytest.fixture()
 def db_session() -> Generator[Session, None, None]:
     """Create an isolated schema in the configured real test database."""
-    if not settings.test_database_url:
-        raise RuntimeError("TEST_DATABASE_URL must be configured for tests")
-    engine = create_engine(settings.test_database_url, pool_pre_ping=True)
+    engine = create_engine(_test_database_url(), pool_pre_ping=True)
     TestingSessionLocal = sessionmaker(
         bind=engine,
         autoflush=False,
@@ -36,6 +42,71 @@ def db_session() -> Generator[Session, None, None]:
         engine.dispose()
 
 
+def create_test_application(
+    db: Session,
+    *,
+    name: str = "CRM",
+    redirect_uris: list[str] | None = None,
+    enable_public_users: bool = True,
+    login_methods: list[str] | None = None,
+) -> dict:
+    """Create an application row set directly in the database."""
+    client_secret = "sec-" + secrets.token_urlsafe(24)
+    application = models.Application(
+        client_id="cid-" + secrets.token_urlsafe(12),
+        name=name,
+        redirect_uris=redirect_uris or ["https://crm.example.com/callback"],
+        enable_public_users=enable_public_users,
+        enable_sso=True,
+        status="active",
+    )
+    db.add(application)
+    db.flush()
+    db.add(
+        models.ApplicationClientSecret(
+            application_id=application.id,
+            secret_hash=hash_secret(client_secret),
+        )
+    )
+    default_role = models.Role(
+        application_id=application.id,
+        code="member",
+        name="Member",
+        is_default=True,
+    )
+    db.add(default_role)
+    db.flush()
+    application.default_role_id = default_role.id
+    for method in login_methods or ["email_code"]:
+        db.add(
+            models.ApplicationLoginMethod(
+                application_id=application.id,
+                method=method,
+                enabled=True,
+                config={},
+            )
+        )
+    db.commit()
+    return {
+        "id": application.id,
+        "client_id": application.client_id,
+        "client_secret": client_secret,
+        "default_role_id": default_role.id,
+    }
+
+
+@pytest.fixture(autouse=True)
+def _local_only_redis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip rate limits, keep captcha in-process, and never send real email."""
+    from app.api import account as account_api
+    from app.api import auth as auth_api
+    from app.services import auth as auth_service
+
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: None)
+    monkeypatch.setattr(account_api, "get_redis_client", lambda: None)
+    monkeypatch.setattr(auth_service, "send_verification_code", lambda email, code: True)
+
+
 @pytest.fixture()
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """Create a FastAPI test client with DB override."""
@@ -51,11 +122,20 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-@pytest.fixture()
-def admin_headers() -> dict[str, str]:
-    """Return admin auth headers using client credentials.
-
-    TODO: Replace with proper client_id/client_secret based auth
-    when admin API endpoints are refactored to use OAuth instead of X-Admin-Token.
-    """
-    return {"X-Admin-Token": "dev-admin-token"}
+def request_email_code(
+    client: TestClient, client_id: str, email: str, purpose: str = "login"
+) -> dict:
+    """Request an email code through the real captcha flow (debug exposes it)."""
+    captcha = client.get("/auth/captcha").json()
+    response = client.post(
+        "/auth/email/request-code",
+        json={
+            "client_id": client_id,
+            "email": email,
+            "captcha_key": captcha["captcha_key"],
+            "captcha_answer": captcha["captcha_answer"],
+            "purpose": purpose,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()

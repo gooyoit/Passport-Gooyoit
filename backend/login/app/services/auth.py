@@ -5,7 +5,7 @@ from datetime import timedelta
 import structlog
 
 from fastapi import HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -69,12 +69,19 @@ def verify_client_secret(db: Session, application: Application, client_secret: s
     return any(verify_secret(client_secret, s.secret_hash) for s in secrets)
 
 
-def issue_email_code(db: Session, *, client_id: str, email: str, purpose: str = "login") -> str:
+def issue_email_code(
+    db: Session, *, client_id: str | None, email: str, purpose: str = "login"
+) -> str:
     """Create an email verification code."""
-    application = get_active_application_by_client_id(db, client_id)
-    if application is None:
+    application = get_active_application_by_client_id(db, client_id) if client_id else None
+    if application is None and client_id is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if not is_login_method_enabled(db, application.id, "email_code"):
+    if application is None and purpose != "bind":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="client_id is required for this purpose",
+        )
+    if application is not None and purpose != "bind" and not is_login_method_enabled(db, application.id, "email_code"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email code login is disabled",
@@ -160,12 +167,12 @@ def complete_password_login(
     response: Response,
     *,
     client_id: str,
-    email: str,
+    identifier: str,
     password: str,
     redirect_uri: str,
     state: str | None,
 ) -> OAuthAuthorizationCode:
-    """Verify email + password and create an authorization code."""
+    """Verify username/email + password and create an authorization code."""
     application = get_active_application_by_client_id(db, client_id)
     if application is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
@@ -177,14 +184,23 @@ def complete_password_login(
             detail="Password login is disabled",
         )
 
-    normalized_email = email.lower()
-    user = db.scalar(select(User).where(User.email == normalized_email))
+    normalized_identifier = identifier.strip().lower()
+    user = db.scalar(
+        select(User).where(
+            or_(
+                func.lower(User.username) == normalized_identifier,
+                func.lower(User.email) == normalized_identifier,
+            )
+        )
+    )
     if user is None or not user.hashed_password:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
+    if user.email and user.email.lower() == normalized_identifier and not user.email_verified_at:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email is not verified")
     if not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
 
-    logger.info("password_login_success", email=normalized_email, user_id=user.id)
+    logger.info("password_login_success", identifier=normalized_identifier, user_id=user.id)
     now = utcnow()
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
@@ -259,6 +275,7 @@ def complete_email_register(
 
     user = User(
         email=normalized_email,
+        email_verified_at=now,
         display_name=f"{first_name} {last_name}",
         hashed_password=hash_password(password),
     )
@@ -319,9 +336,15 @@ def get_or_create_email_user(db: Session, *, email: str) -> User:
     normalized_email = email.lower()
     user = db.scalar(select(User).where(User.email == normalized_email))
     if user is None:
-        user = User(email=normalized_email, display_name=normalized_email.split("@")[0])
+        user = User(
+            email=normalized_email,
+            email_verified_at=utcnow(),
+            display_name=normalized_email.split("@")[0],
+        )
         db.add(user)
         db.flush()
+    elif user.email_verified_at is None:
+        user.email_verified_at = utcnow()
 
     identity = db.scalar(
         select(UserIdentity).where(
@@ -348,7 +371,7 @@ def get_or_create_oauth_user(
     *,
     provider: str,
     provider_user_id: str,
-    email: str,
+    email: str | None,
     display_name: str | None,
     avatar_url: str | None,
     raw_profile: dict,
@@ -366,12 +389,17 @@ def get_or_create_oauth_user(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return user
 
-    normalized_email = email.lower()
-    user = db.scalar(select(User).where(User.email == normalized_email))
+    normalized_email = email.lower() if email else None
+    user = (
+        db.scalar(select(User).where(User.email == normalized_email))
+        if normalized_email
+        else None
+    )
     if user is None:
         user = User(
             email=normalized_email,
-            display_name=display_name or normalized_email.split("@")[0],
+            email_verified_at=utcnow() if normalized_email else None,
+            display_name=display_name or (normalized_email.split("@")[0] if normalized_email else provider),
             avatar_url=avatar_url,
             status=UserStatus.ACTIVE,
         )
@@ -396,8 +424,13 @@ def ensure_application_user(
     *,
     application: Application,
     user: User,
+    require_public_users: bool = True,
 ) -> ApplicationUser:
-    """Ensure a user may access an application and has membership row."""
+    """Ensure a user may access an application and has membership row.
+
+    Third-party identities verified through a provider login method the
+    application enabled are trusted to join even when public signup is off.
+    """
     membership = db.scalar(
         select(ApplicationUser).where(
             ApplicationUser.application_id == application.id,
@@ -412,7 +445,7 @@ def ensure_application_user(
             )
         return membership
 
-    if not application.enable_public_users:
+    if require_public_users and not application.enable_public_users:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not allowed to access this application",

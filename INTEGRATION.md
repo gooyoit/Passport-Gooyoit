@@ -32,7 +32,7 @@ https://passport.gooyoit.com/?client_id=你的CLIENT_ID&redirect_uri=你的回�
 用户登录成功后，Passport 会跳回你的 `redirect_uri`，带上 `code` 参数。用 `code` 调用 Token 接口：
 
 ```bash
-POST https://api.gooyoit.com:8443/oauth/token
+POST https://passport.gooyoit.com/api/oauth/token
 Content-Type: application/json
 
 {
@@ -74,9 +74,9 @@ Passport 支持为每个接入系统独立配置 Google、GitHub、微信登录�
 
 | 平台 | 回调地址 |
 |---|---|
-| Google | `https://api.gooyoit.com:8443/oauth/providers/google/callback` |
-| GitHub | `https://api.gooyoit.com:8443/oauth/providers/github/callback` |
-| 微信 | `https://api.gooit.com:8443/oauth/providers/wechat/callback` |
+| Google | `https://passport.gooyoit.com/oauth/providers/google/callback` |
+| GitHub | `https://passport.gooyoit.com/oauth/providers/github/callback` |
+| 微信 | `https://passport.gooyoit.com/oauth/providers/wechat/callback` |
 
 本地开发时将域名替换为 `http://127.0.0.1:8080`。
 
@@ -122,7 +122,11 @@ Passport 支持为每个接入系统独立配置 Google、GitHub、微信登录�
 ### 验证配置
 
 ```bash
-curl https://api.gooyoit.com:8443/oauth/providers/google?client_id=你的CLIENT_ID
+curl https://passport.gooyoit.com/api/oauth/providers/google?client_id=你的CLIENT_ID
 ```
 
 返回 `"enabled": true` 表示配置成功。
+
+## 账号补全（用户绑定邮箱 / 密码）
+
+第三方登录（微信等）的用户可能跳过账号完善步骤。业务系统可检测并在自己的产品内引导用户补绑邮箱、设置密码，也可直接链接到 Passport 账号中心页 `https://passport.gooyoit.com/account/settings`。接口与示例见 [backend/login/docs/account-center.md](backend/login/docs/account-center.md)。

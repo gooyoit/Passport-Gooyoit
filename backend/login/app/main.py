@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import auth, health, oauth
+from app.api import account, auth, health, oauth
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health.router)
+    app.include_router(account.router, prefix="/account", tags=["account"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(oauth.router, prefix="/oauth", tags=["oauth"])
     return app

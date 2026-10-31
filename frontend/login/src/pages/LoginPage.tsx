@@ -137,7 +137,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
           body: JSON.stringify({
             client_id: oauth.clientId,
             redirect_uri: oauth.redirectUri,
-            email,
+            identifier: email,
             password,
             state: oauth.state,
           }),
@@ -230,13 +230,13 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
 
           <form className="email-form" onSubmit={login}>
             <label className="field mode-field">
-              <span>{t("login.email")}</span>
+              <span>{mode === "code" ? t("login.email") : t("login.identifier")}</span>
               <div className="input-with-action">
                 <input
-                  type="email"
+                  type={mode === "code" ? "email" : "text"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="m@example.com"
+                  placeholder={mode === "code" ? "m@example.com" : t("login.identifierPlaceholder")}
                   required
                 />
                 {emailPasswordEnabled && (
@@ -359,6 +359,9 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
           <p className="switch-text">
             {t("login.noAccount")}
             <button onClick={() => onSwitch("register")}>{t("login.register")}</button>
+          </p>
+          <p className="switch-text">
+            <a href="/account/settings">{t("login.accountSettings")}</a>
           </p>
           <p className="terms">
             {t("login.termsPre")}

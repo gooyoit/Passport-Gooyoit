@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
-from app.models import ApplicationLoginMethod, User, UserStatus
+from app.models import ApplicationLoginMethod, User, UserIdentity, UserStatus
 from app.schemas import (
     LoginMethodsResponse,
     LogoutRequest,
@@ -22,7 +22,9 @@ from app.schemas import (
     UserInfo,
     UserInfoResponse,
 )
+from app.services.account import get_account_profile
 from app.services.applications import get_active_application_by_client_id, validate_redirect_uri
+from app.services.account_setup import create_pending_account_setup
 from app.services.auth import (
     SSO_COOKIE_NAME,
     ensure_application_user,
@@ -187,6 +189,30 @@ async def oauth_provider_callback(
     client = build_oauth_client(provider, method.config)
     profile = await fetch_provider_profile(provider, client, request)
 
+    identity = db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == provider,
+            UserIdentity.provider_user_id == profile["id"],
+        )
+    )
+    if provider == "wechat" and identity is None:
+        setup_token = create_pending_account_setup(
+            {
+                "provider": provider,
+                "provider_user_id": profile["id"],
+                "display_name": profile.get("name"),
+                "avatar_url": profile.get("avatar_url"),
+                "raw_profile": profile.get("raw") or {},
+                "client_id": application.client_id,
+                "redirect_uri": context["redirect_uri"],
+                "state": context.get("state"),
+            }
+        )
+        origin = f"{request.url.scheme}://{request.url.netloc}"
+        return RedirectResponse(
+            f"{origin}/account/complete?{urlencode({'token': setup_token})}"
+        )
+
     user = get_or_create_oauth_user(
         db,
         provider=provider,
@@ -243,6 +269,7 @@ def token(
         expires_in=expires_in,
         user=UserInfo(
             id=user.id,
+            username=user.username,
             email=user.email,
             display_name=user.display_name,
             status=user.status,
@@ -271,6 +298,7 @@ def refresh_token(
         expires_in=expires_in,
         user=UserInfo(
             id=user.id,
+            username=user.username,
             email=user.email,
             display_name=user.display_name,
             status=user.status,
@@ -321,13 +349,17 @@ def userinfo(
     application_id = int(claims["application_id"])
     roles = [role.code for role in get_effective_roles(db, application_id, user.id)]
     permissions = get_effective_permissions(db, application_id, user.id)
+    profile = get_account_profile(db, user=user)
     return UserInfoResponse(
         user=UserInfo(
             id=user.id,
+            username=user.username,
             email=user.email,
             display_name=user.display_name,
             status=user.status,
         ),
         roles=roles,
         permissions=permissions,
+        has_password=profile.has_password,
+        identities=profile.identities,
     )
