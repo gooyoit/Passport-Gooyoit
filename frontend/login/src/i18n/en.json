@@ -128,6 +128,7 @@
     "mergeIdentifier": "Username or email of the existing account",
     "mergePassword": "Password of the existing account",
     "mergeSubmit": "Verify and merge",
-    "merged": "Accounts merged — your sign-in methods now live on the existing account"
+    "merged": "Accounts merged — your sign-in methods now live on the existing account",
+    "accountId": "Passport ID "
   }
 }

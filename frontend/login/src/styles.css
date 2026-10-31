@@ -684,15 +684,46 @@ h1 {
 
 .account-setup-card .auth-header {
   flex-direction: column;
-  text-align: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  text-align: left;
+  margin-bottom: 18px;
 }
 
 .setup-lead {
-  max-width: 380px;
+  max-width: 400px;
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
+}
+
+/* Two-step progress: wechat verified ✓ → complete profile. */
+.setup-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.setup-steps .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setup-steps .step.done { color: #15803d; }
+
+.setup-steps .step.current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.setup-steps .step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  min-width: 16px;
 }
 
 .provider-confirmation {
@@ -749,6 +780,22 @@ h1 {
   font-weight: 600;
 }
 
+.setup-tabs button {
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+/* Field groups: required credentials vs optional contact details. */
+.field-group-title {
+  margin: 20px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field-group-title:first-child {
+  margin-top: 0;
+}
+
 .skip-btn {
   width: 100%;
   height: 42px;
@@ -756,11 +803,19 @@ h1 {
   border: 0;
   background: transparent;
   color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
 }
 
 .skip-btn:hover { color: var(--blue); }
 .skip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.skip-hint {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
 
 .link-note {
   display: flex;
@@ -817,14 +872,14 @@ h1 {
 
 .settings-page {
   min-height: 100vh;
-  padding: 48px 20px;
+  padding: 56px 20px 40px;
   background:
     radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.10), transparent 40%),
     linear-gradient(135deg, #EFF6FF 0%, #F8FAFF 50%, #fff 100%);
 }
 
 .settings-container {
-  max-width: 640px;
+  max-width: 620px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -848,7 +903,7 @@ h1 {
 }
 
 .settings-hero h1 {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   font-size: 20px;
 }
 
@@ -856,6 +911,15 @@ h1 {
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.settings-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .settings-avatar {
@@ -886,10 +950,11 @@ h1 {
 }
 
 .credential-row {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
+  padding: 13px 0;
   border-top: 1px solid var(--bg-input);
 }
 
@@ -897,13 +962,19 @@ h1 {
   border-top: none;
 }
 
-.credential-row > svg,
-.credential-row .provider-ic {
+/* Fixed icon slot keeps every row's text on one axis. */
+.credential-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--bg-input);
   color: var(--text-secondary);
   flex-shrink: 0;
 }
 
-.provider-ic.wechat {
+.credential-icon.wechat {
   color: #22c55e;
 }
 
@@ -946,6 +1017,7 @@ h1 {
 }
 
 .inline-form {
+  width: 100%;
   margin: 0 0 12px;
   padding: 16px;
   border: 1px solid var(--border);
@@ -954,6 +1026,21 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  animation: inline-form-in 0.18s ease-out;
+}
+
+.inline-form.merge-form {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: #fff;
+}
+
+@keyframes inline-form-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inline-form { animation: none; }
 }
 
 .settings-msg {

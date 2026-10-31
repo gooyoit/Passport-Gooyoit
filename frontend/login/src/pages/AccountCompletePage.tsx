@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Link2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Link2, ShieldCheck, UserRound } from "lucide-react";
 import Showcase from "../components/Showcase";
 import { api, redirectUriSchema, safeRedirect } from "../lib/utils";
 import { useCaptcha } from "../hooks/useCaptcha";
@@ -113,6 +113,12 @@ export default function AccountCompletePage() {
             {context && <p className="setup-lead">微信身份已验证，完成后继续访问「{context.application_name}」</p>}
           </div>
 
+          <div className="setup-steps" aria-hidden="true">
+            <span className="step done"><CheckCircle2 size={14} /> 微信验证</span>
+            <span className="step-line" />
+            <span className="step current"><UserRound size={14} /> 完善资料</span>
+          </div>
+
           {context?.display_name && (
             <div className="provider-confirmation">
               {context.avatar_url ? <img src={context.avatar_url} alt="微信头像" /> : <CheckCircle2 size={22} />}
@@ -127,13 +133,16 @@ export default function AccountCompletePage() {
 
           {mode === "new" ? (
             <form onSubmit={(event) => { event.preventDefault(); void finish("new"); }}>
+              <p className="field-group-title">登录凭据</p>
               <label className="field"><span>用户名（可选）</span><input value={form.username} onChange={update("username")} placeholder="3-64 位字母、数字、下划线或连字符" autoComplete="username" /></label>
               <label className="field"><span>密码（设置用户名时必填）</span><div className="pwd-wrap"><input type={showPassword ? "text" : "password"} value={form.password} onChange={update("password")} placeholder="至少 8 位，包含三类字符" autoComplete="new-password" /><button type="button" className="pwd-toggle" onClick={() => setShowPassword(!showPassword)} aria-label="显示或隐藏密码">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
-              <label className="field"><span>邮箱（可选，验证后可用于登录）</span><input type="email" value={form.email} onChange={update("email")} placeholder="m@example.com" autoComplete="email" /><small className="field-hint">如果邮箱已属于某个账号，通过验证后会将微信绑定到该账号。</small></label>
+              <p className="field-group-title">邮箱与联系方式（可选）</p>
+              <label className="field"><span>邮箱</span><input type="email" value={form.email} onChange={update("email")} placeholder="m@example.com" autoComplete="email" /><small className="field-hint">验证后可用于登录；若邮箱已属于某个账号，会把微信绑定到该账号。</small></label>
               {form.email && <label className="field"><span>邮箱验证码</span><div className="code-row"><input value={form.emailCode} onChange={update("emailCode")} maxLength={6} placeholder="6 位验证码" /><button type="button" className="send-code-btn inline" onClick={requestEmailCode} disabled={loading || cooldown > 0}>{cooldown > 0 ? `${cooldown}s` : "发送验证码"}</button>{codeMessage && <p className="field-msg">{codeMessage}</p>}</div></label>}
-              <label className="field"><span>联系电话（可选，暂不验证）</span><input type="tel" value={form.contactPhone} onChange={update("contactPhone")} placeholder="例如 +8613800138000" autoComplete="tel" /></label>
+              <label className="field"><span>联系电话（暂不验证）</span><input type="tel" value={form.contactPhone} onChange={update("contactPhone")} placeholder="例如 +8613800138000" autoComplete="tel" /></label>
               <button className="primary-btn" type="submit" disabled={loading}>{loading ? "处理中…" : "保存并继续"}</button>
               <button className="skip-btn" type="button" onClick={() => void finish("skip")} disabled={loading}>暂时跳过，仅使用微信登录</button>
+              <p className="skip-hint">跳过后仍可随时在 Passport 账号设置中补全</p>
             </form>
           ) : (
             <form onSubmit={(event) => { event.preventDefault(); void finish("link"); }}>

@@ -35,11 +35,12 @@ type Profile = {
 type Section = "email" | "credentials" | "phone" | null;
 
 function ProviderIcon({ provider }: { provider: string }) {
-  if (provider === "wechat") return <FaWeixin size={20} className="provider-ic wechat" />;
-  if (provider === "google") return <GoogleIcon size={20} />;
-  if (provider === "github") return <GithubIcon size={20} />;
-  if (provider === "email") return <Mail size={20} />;
-  return <UserCircle2 size={20} />;
+  const cls = provider === "wechat" ? "credential-icon wechat" : "credential-icon";
+  if (provider === "wechat") return <div className={cls}><FaWeixin size={18} /></div>;
+  if (provider === "google") return <div className={cls}><GoogleIcon size={18} /></div>;
+  if (provider === "github") return <div className={cls}><GithubIcon size={18} /></div>;
+  if (provider === "email") return <div className={cls}><Mail size={18} /></div>;
+  return <div className={cls}><UserCircle2 size={18} /></div>;
 }
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -262,6 +263,7 @@ export default function AccountSettingsPage() {
           <div className="settings-hero-text">
             <h1>{profile.user.display_name || t("accountSettings.defaultName")}</h1>
             <p>{t("accountSettings.lead")}</p>
+            <p className="settings-hero-meta">{t("accountSettings.accountId")}{profile.user.id}</p>
           </div>
         </div>
 
@@ -333,7 +335,7 @@ export default function AccountSettingsPage() {
           )}
 
           <div className="credential-row">
-            <KeyRound size={20} />
+            <div className="credential-icon"><KeyRound size={18} /></div>
             <div className="credential-label">
               <strong>{t("accountSettings.passwordCredential")}</strong>
               <span>{profile.has_password ? t("accountSettings.passwordSetHint") : t("accountSettings.passwordHint")}</span>
@@ -376,7 +378,7 @@ export default function AccountSettingsPage() {
         <section className="auth-card settings-card">
           <h2 className="settings-section-title">{t("accountSettings.contact")}</h2>
           <div className="credential-row">
-            <Smartphone size={20} />
+            <div className="credential-icon"><Smartphone size={18} /></div>
             <div className="credential-label">
               <strong>{t("accountSettings.phone")}</strong>
               <span>{profile.user.contact_phone || t("accountSettings.phoneHint")}</span>

@@ -128,6 +128,7 @@
     "mergeIdentifier": "已有账号的用户名或邮箱",
     "mergePassword": "已有账号的密码",
     "mergeSubmit": "验证并合并",
-    "merged": "账号已合并，当前登录方式已并入已有账号"
+    "merged": "账号已合并，当前登录方式已并入已有账号",
+    "accountId": "账号 ID "
   }
 }
