@@ -8,22 +8,7 @@ from sqlalchemy.orm import Session
 from app.schemas import AccountSetupRequest
 from app.services import account_setup
 
-from conftest import create_test_application
-
-
-class FakeRedis:
-    def __init__(self):
-        self.values: dict[str, str] = {}
-
-    def setex(self, key: str, ttl: int, value: str) -> None:
-        assert ttl > 0
-        self.values[key] = value
-
-    def get(self, key: str) -> str | None:
-        return self.values.get(key)
-
-    def delete(self, key: str) -> None:
-        self.values.pop(key, None)
+from conftest import FakeRedis, create_test_application
 
 
 def _pending_wechat_token(db_session: Session, *, enable_public_users: bool) -> tuple[dict, str]:
@@ -181,3 +166,91 @@ def test_wechat_link_mode_binds_existing_local_account(
         "https://crm.example.com/callback?code="
     )
 
+
+
+def test_setup_link_mode_locks_out_brute_force(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Repeated wrong passwords on a setup token trigger the lockout."""
+    from app.api import auth as auth_api
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+
+    application, context = _pending_wechat_token(db_session, enable_public_users=False)
+    from app.core.security import hash_password
+    from app.models import User
+
+    db_session.add(
+        User(
+            username="victim",
+            hashed_password=hash_password("RightPass1!"),
+            status="active",
+        )
+    )
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+
+    for _ in range(5):
+        response = client.post(
+            "/auth/account-setup",
+            json={"token": token, "mode": "link", "identifier": "victim", "existing_password": "WrongPass1!"},
+        )
+        assert response.status_code == 401
+
+    locked = client.post(
+        "/auth/account-setup",
+        json={"token": token, "mode": "link", "identifier": "victim", "existing_password": "RightPass1!"},
+    )
+    assert locked.status_code == 429
+
+
+def test_password_login_lockout_survives_identifier_variants(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Identifier spelling variants share one failure counter."""
+    from app.api import auth as auth_api
+    from app.core.security import hash_password
+    from app.models import User
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+
+    application = create_test_application(
+        db_session, login_methods=["email_password"]
+    )
+    db_session.add(
+        User(
+            email="user@example.com",
+            email_verified_at=None,
+            hashed_password=hash_password("RightPass1!"),
+            status="active",
+        )
+    )
+    db_session.commit()
+
+    attempts = 0
+    for variant in ["USER@example.com", " user@example.com ", "User@Example.com"]:
+        while attempts < 5:
+            response = client.post(
+                "/auth/email/login-password",
+                json={
+                    "client_id": application["client_id"],
+                    "redirect_uri": "https://crm.example.com/callback",
+                    "identifier": variant,
+                    "password": "WrongPass1!",
+                },
+            )
+            assert response.status_code == 401
+            attempts += 1
+
+    locked = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "identifier": "user@example.com",
+            "password": "RightPass1!",
+        },
+    )
+    assert locked.status_code == 429

@@ -42,6 +42,35 @@ def db_session() -> Generator[Session, None, None]:
         engine.dispose()
 
 
+class FakeRedis:
+    """In-memory redis double covering the rate-limit command surface."""
+
+    def __init__(self):
+        self.values: dict[str, str] = {}
+
+    def setex(self, key: str, ttl: int, value: str) -> None:
+        assert ttl > 0
+        self.values[key] = value
+
+    def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    def delete(self, *keys: str) -> None:
+        for key in keys:
+            self.values.pop(key, None)
+
+    def incr(self, key: str) -> int:
+        count = int(self.values.get(key, 0)) + 1
+        self.values[key] = str(count)
+        return count
+
+    def expire(self, key: str, ttl: int) -> None:
+        pass
+
+    def ttl(self, key: str) -> int:
+        return 60
+
+
 def create_test_application(
     db: Session,
     *,

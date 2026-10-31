@@ -75,11 +75,32 @@ def account_setup_context(
 @router.post("/account-setup", response_model=AccountSetupResponse)
 def finish_account_setup(
     payload: AccountSetupRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> AccountSetupResponse:
     """Create or link a local account and resume the original OAuth request."""
-    redirect_uri = complete_account_setup(db, response, payload)
+    # Link mode verifies an existing account's password; without a lockout
+    # here, a valid setup token becomes a free password oracle.
+    identifier = (payload.identifier or "").strip().lower()
+    redis_client = None
+    if payload.mode == "link" and identifier:
+        redis_client = _check_rate_limit(
+            request,
+            check_login_lockout,
+            log_label="account_setup_link",
+            email=identifier,
+        )
+
+    try:
+        redirect_uri = complete_account_setup(db, response, payload)
+    except HTTPException as exc:
+        if exc.status_code in (400, 401) and redis_client:
+            record_failed_login(redis_client, identifier, get_client_ip(request))
+        raise
+
+    if redis_client:
+        clear_failed_login(redis_client, identifier, get_client_ip(request))
     return AccountSetupResponse(redirect_uri=redirect_uri)
 
 
@@ -188,8 +209,14 @@ def email_password_login(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Complete username/email + password login and return an authorization code."""
+    # Normalize before keying the lockout so identifier variants cannot
+    # shard the failure counter.
+    normalized_identifier = payload.identifier.strip().lower()
     redis_client = _check_rate_limit(
-        request, check_login_lockout, log_label="password_login", email=payload.identifier
+        request,
+        check_login_lockout,
+        log_label="password_login",
+        email=normalized_identifier,
     )
 
     try:
@@ -204,12 +231,14 @@ def email_password_login(
         )
     except HTTPException as exc:
         if exc.status_code in (400, 401) and redis_client:
-            record_failed_login(redis_client, payload.identifier, get_client_ip(request))
-        logger.warning("password_login_failed", identifier=payload.identifier, detail=exc.detail)
+            record_failed_login(
+                redis_client, normalized_identifier, get_client_ip(request)
+            )
+        logger.warning("password_login_failed", identifier=normalized_identifier, detail=exc.detail)
         raise
 
     if redis_client:
-        clear_failed_login(redis_client, payload.identifier, get_client_ip(request))
+        clear_failed_login(redis_client, normalized_identifier, get_client_ip(request))
 
     logger.info("password_login_success", identifier=payload.identifier)
     return EmailLoginResponse(
