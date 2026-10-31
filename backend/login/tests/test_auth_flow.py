@@ -6,37 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.models import UserRole
 
-
-def create_public_application(client: TestClient, admin_headers: dict[str, str]) -> dict:
-    """Create an application for tests."""
-    response = client.post(
-        "/admin/applications",
-        headers=admin_headers,
-        json={
-            "name": "CRM",
-            "redirect_uris": ["https://crm.example.com/callback"],
-            "enable_public_users": True,
-            "enable_sso": True,
-        },
-    )
-    assert response.status_code == 201
-    return response.json()
+from conftest import create_test_application, request_email_code
 
 
 def test_email_login_code_exchange_and_userinfo(
     client: TestClient,
-    admin_headers: dict[str, str],
     db_session: Session,
 ) -> None:
     """Email login issues one-time code, tokens, and default role."""
-    application = create_public_application(client, admin_headers)
+    application = create_test_application(db_session)
 
-    code_response = client.post(
-        "/auth/email/request-code",
-        json={"client_id": application["client_id"], "email": "User@Example.com"},
-    )
-    assert code_response.status_code == 200
-    debug_code = code_response.json()["debug_code"]
+    debug_code = request_email_code(
+        client, application["client_id"], "User@Example.com"
+    )["debug_code"]
 
     login_response = client.post(
         "/auth/email/login",
@@ -90,14 +72,13 @@ def test_email_login_code_exchange_and_userinfo(
 
 def test_refresh_token_and_logout(
     client: TestClient,
-    admin_headers: dict[str, str],
+    db_session: Session,
 ) -> None:
     """Refresh token can renew access and logout revokes refresh token."""
-    application = create_public_application(client, admin_headers)
-    debug_code = client.post(
-        "/auth/email/request-code",
-        json={"client_id": application["client_id"], "email": "user@example.com"},
-    ).json()["debug_code"]
+    application = create_test_application(db_session)
+    debug_code = request_email_code(
+        client, application["client_id"], "user@example.com"
+    )["debug_code"]
     authorization_code = client.post(
         "/auth/email/login",
         json={
@@ -148,14 +129,13 @@ def test_refresh_token_and_logout(
 
 def test_invalid_redirect_uri_is_rejected(
     client: TestClient,
-    admin_headers: dict[str, str],
+    db_session: Session,
 ) -> None:
     """Login rejects callback URLs that are not whitelisted."""
-    application = create_public_application(client, admin_headers)
-    code_response = client.post(
-        "/auth/email/request-code",
-        json={"client_id": application["client_id"], "email": "user@example.com"},
-    )
+    application = create_test_application(db_session)
+    debug_code = request_email_code(
+        client, application["client_id"], "user@example.com"
+    )["debug_code"]
 
     login_response = client.post(
         "/auth/email/login",
@@ -163,7 +143,7 @@ def test_invalid_redirect_uri_is_rejected(
             "client_id": application["client_id"],
             "redirect_uri": "https://evil.example.com/callback",
             "email": "user@example.com",
-            "code": code_response.json()["debug_code"],
+            "code": debug_code,
         },
     )
     assert login_response.status_code == 400

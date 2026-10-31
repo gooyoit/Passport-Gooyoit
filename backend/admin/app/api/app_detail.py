@@ -106,7 +106,7 @@ def update_application_user_status(
         id=membership.id,
         application_id=membership.application_id,
         user_id=membership.user_id,
-        user_email=user.email if user else "",
+        user_email=user.email if user else None,
         user_display_name=user.display_name if user else None,
         user_status=user.status if user else "",
         status=membership.status,

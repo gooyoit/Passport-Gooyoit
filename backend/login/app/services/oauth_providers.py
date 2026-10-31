@@ -2,8 +2,11 @@
 
 import os
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from authlib.common.urls import add_params_to_qs, add_params_to_uri
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.starlette_client import StarletteOAuth2App
 from fastapi import HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -11,6 +14,37 @@ from app.models import Application, ApplicationLoginMethod
 from app.services.applications import validate_redirect_uri
 
 SUPPORTED_PROVIDERS = {"wechat", "google", "github"}
+
+
+def _wechat_client_auth(client, method, uri, headers, body):
+    """Use WeChat's appid/secret token endpoint parameter names."""
+    credentials = [
+        ("appid", client.client_id),
+        ("secret", client.client_secret or ""),
+    ]
+    if method.upper() == "GET":
+        uri = add_params_to_uri(uri, credentials)
+    else:
+        body = add_params_to_qs(body or "", credentials)
+        if "Content-Length" in headers:
+            headers["Content-Length"] = str(len(body))
+    return uri, headers, body
+
+
+class WeChatOAuth2App(StarletteOAuth2App):
+    """Authlib adapter for WeChat's non-standard OAuth parameter names."""
+
+    async def create_authorization_url(self, redirect_uri=None, **kwargs):
+        result = await super().create_authorization_url(redirect_uri, **kwargs)
+        parsed = urlsplit(result["url"])
+        query = [
+            ("appid" if key == "client_id" else key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        ]
+        result["url"] = urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), "wechat_redirect")
+        )
+        return result
 
 
 def get_enabled_provider_method(
@@ -86,6 +120,7 @@ def build_oauth_client(provider: str, config: dict[str, Any] | None):
     else:
         oauth.register(
             name=provider,
+            client_cls=WeChatOAuth2App,
             client_id=client_id,
             client_secret=client_secret,
             access_token_url=provider_config.get(
@@ -97,7 +132,11 @@ def build_oauth_client(provider: str, config: dict[str, Any] | None):
                 "https://open.weixin.qq.com/connect/qrconnect",
             ),
             api_base_url=provider_config.get("api_base_url", "https://api.weixin.qq.com/"),
-            client_kwargs={"scope": provider_config.get("scope", "snsapi_login")},
+            access_token_params={"method": "GET"},
+            client_kwargs={
+                "scope": provider_config.get("scope", "snsapi_login"),
+                "token_endpoint_auth_method": _wechat_client_auth,
+            },
         )
     return oauth.create_client(provider)
 
@@ -164,11 +203,19 @@ async def fetch_provider_profile(provider: str, client: Any, request: Request) -
             "raw": user_profile,
         }
 
-    profile_response = await client.get("sns/userinfo", token=token)
+    profile_response = await client.get(
+        "sns/userinfo",
+        params={
+            "access_token": token["access_token"],
+            "openid": token["openid"],
+            "lang": "zh_CN",
+        },
+        withhold_token=True,
+    )
     profile = profile_response.json()
     return {
-        "id": str(profile["openid"]),
-        "email": profile.get("email") or f"{profile['openid']}@wechat.oauth.local",
+        "id": str(profile.get("unionid") or profile["openid"]),
+        "email": None,
         "name": profile.get("nickname"),
         "avatar_url": profile.get("headimgurl"),
         "raw": profile,

@@ -13,7 +13,9 @@ export default function UsersView({
   const [search, setSearch] = useState("");
   const filtered = users.filter(
     (u) =>
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.username ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.contact_phone ?? "").includes(search) ||
       (u.display_name ?? "").toLowerCase().includes(search.toLowerCase()),
   );
   return (
@@ -28,7 +30,7 @@ export default function UsersView({
               className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-brand sm:w-80"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索邮箱或名称…"
+              placeholder="搜索用户名、邮箱或联系电话…"
             />
           </div>
         }
@@ -40,7 +42,8 @@ export default function UsersView({
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
               <tr>
-                <th className="px-4 py-3">邮箱</th>
+                <th className="px-4 py-3">账号</th>
+                <th className="px-4 py-3">联系电话</th>
                 <th className="px-4 py-3">显示名</th>
                 <th className="px-4 py-3">状态</th>
                 <th className="px-4 py-3 min-w-[100px]">操作</th>
@@ -49,7 +52,8 @@ export default function UsersView({
             <tbody className="divide-y divide-slate-200">
               {filtered.map((user) => (
                 <tr key={user.id} className="bg-white">
-                  <td className="px-4 py-4 align-middle font-semibold text-slate-900">{user.email}</td>
+                  <td className="px-4 py-4 align-middle font-semibold text-slate-900">{user.username ?? user.email ?? `#${user.id}`}</td>
+                  <td className="px-4 py-4 align-middle text-slate-500">{user.contact_phone ?? "-"}</td>
                   <td className="px-4 py-4 align-middle text-slate-500">{user.display_name ?? "-"}</td>
                   <td className="px-4 py-4 align-middle"><StatusBadge status={user.status} /></td>
                   <td className="px-4 py-4 align-middle">

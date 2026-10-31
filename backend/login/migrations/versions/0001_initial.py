@@ -27,7 +27,6 @@ def upgrade() -> None:
         "applications",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("client_id", sa.String(length=128), nullable=False),
-        sa.Column("client_secret_hash", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text()),
         sa.Column("redirect_uris", sa.JSON(), nullable=False),

@@ -54,12 +54,12 @@ cd backend/admin && uv run pytest
 |---|---|
 | Login 前端 | https://passport.gooyoit.com |
 | Admin 前端 | https://passport-admin.gooyoit.com |
-| Login API | https://api.gooyoit.com:8443 |
-| Admin API | https://admin-api.gooyoit.com:8443 |
+| Login API | https://passport.gooyoit.com/api |
+| Admin API | https://passport-admin.gooyoit.com/api |
 
 ## 文档
 
 | 文档 | 说明 |
 |---|---|
 | [INTEGRATION.md](./INTEGRATION.md) | 接入指南（OAuth 流程、第三方登录配置） |
-| [DEPLOY.md](./DEPLOY.md) | 部署指南（服务器、Nginx、SSL、Vercel） |
+| [DEPLOY.md](./DEPLOY.md) | 部署指南（服务器、Nginx、SSL） |

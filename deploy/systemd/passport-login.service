@@ -1,0 +1,16 @@
+[Unit]
+Description=Passport Login Service
+After=network.target mysql.service redis.service
+
+[Service]
+User=root
+WorkingDirectory=/data/apps/gooyoit-passport/backend
+ExecStart=/data/apps/gooyoit-passport/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --access-log --log-level info
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+EnvironmentFile=/data/apps/gooyoit-passport/backend/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -159,7 +159,9 @@ class UserInfo(BaseModel):
     """User identity in an application."""
 
     id: int
-    email: str
+    username: str | None = None
+    email: str | None
+    contact_phone: str | None = None
     display_name: str | None
     status: str
 
@@ -188,7 +190,7 @@ class ApplicationUserRead(BaseModel):
     id: int
     application_id: int
     user_id: int
-    user_email: str
+    user_email: str | None
     user_display_name: str | None
     user_status: str
     status: str
@@ -228,7 +230,7 @@ class TokenExchangeResponse(BaseModel):
 class WebAuthnCredentialRead(BaseModel):
     id: int
     user_id: int
-    user_email: str
+    user_email: str | None
     user_display_name: str | None
     credential_id: str
     sign_count: int

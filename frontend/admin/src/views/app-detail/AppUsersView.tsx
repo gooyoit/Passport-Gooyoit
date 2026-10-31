@@ -143,7 +143,7 @@ export default function AppUsersView({
         open={editingUser !== null}
         onClose={() => setEditingUser(null)}
         title="管理用户角色"
-        subtitle={editingUser ? editingUser.user_email : undefined}
+        subtitle={editingUser?.user_email ?? undefined}
         actions={
           <>
             <button onClick={() => setEditingUser(null)} className={btnOutline}>取消</button>

@@ -12,6 +12,9 @@ from app.core.config import settings
 from app.core.redis import get_redis_client
 from app.db.session import get_db
 from app.schemas import (
+    AccountSetupRead,
+    AccountSetupRequest,
+    AccountSetupResponse,
     CaptchaResponse,
     EmailCodeRequest,
     EmailCodeResponse,
@@ -26,6 +29,8 @@ from app.schemas import (
     WebAuthnRegisterBeginResponse,
     WebAuthnRegisterFinishRequest,
 )
+from app.services.account_setup import complete_account_setup, get_pending_account_setup
+from app.services.applications import get_active_application_by_client_id
 from app.services.auth import complete_email_login, complete_email_register, complete_password_login, issue_email_code
 from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
@@ -46,6 +51,36 @@ from app.services.webauthn_service import (
 from redis import Redis
 
 router = APIRouter()
+
+
+@router.get("/account-setup", response_model=AccountSetupRead)
+def account_setup_context(
+    token: str,
+    db: Session = Depends(get_db),
+) -> AccountSetupRead:
+    """Return safe display data for a pending third-party account setup."""
+    pending = get_pending_account_setup(token)
+    application = get_active_application_by_client_id(db, pending["client_id"])
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    return AccountSetupRead(
+        provider=pending["provider"],
+        display_name=pending.get("display_name"),
+        avatar_url=pending.get("avatar_url"),
+        application_name=application.name,
+        client_id=application.client_id,
+    )
+
+
+@router.post("/account-setup", response_model=AccountSetupResponse)
+def finish_account_setup(
+    payload: AccountSetupRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> AccountSetupResponse:
+    """Create or link a local account and resume the original OAuth request."""
+    redirect_uri = complete_account_setup(db, response, payload)
+    return AccountSetupResponse(redirect_uri=redirect_uri)
 
 
 def _check_rate_limit(request: Request, check_fn, *, log_label: str, email: str | None = None) -> Redis:
@@ -152,9 +187,9 @@ def email_password_login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
-    """Complete email + password login and return an authorization code."""
+    """Complete username/email + password login and return an authorization code."""
     redis_client = _check_rate_limit(
-        request, check_login_lockout, log_label="password_login", email=str(payload.email)
+        request, check_login_lockout, log_label="password_login", email=payload.identifier
     )
 
     try:
@@ -162,21 +197,21 @@ def email_password_login(
             db,
             response,
             client_id=payload.client_id,
-            email=str(payload.email),
+            identifier=payload.identifier,
             password=payload.password,
             redirect_uri=str(payload.redirect_uri),
             state=payload.state,
         )
     except HTTPException as exc:
         if exc.status_code in (400, 401) and redis_client:
-            record_failed_login(redis_client, str(payload.email), get_client_ip(request))
-        logger.warning("password_login_failed", email=payload.email, detail=exc.detail)
+            record_failed_login(redis_client, payload.identifier, get_client_ip(request))
+        logger.warning("password_login_failed", identifier=payload.identifier, detail=exc.detail)
         raise
 
     if redis_client:
-        clear_failed_login(redis_client, str(payload.email), get_client_ip(request))
+        clear_failed_login(redis_client, payload.identifier, get_client_ip(request))
 
-    logger.info("password_login_success", email=payload.email)
+    logger.info("password_login_success", identifier=payload.identifier)
     return EmailLoginResponse(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",

@@ -89,6 +89,49 @@ curl -X POST "http://127.0.0.1:8080/admin/applications/1/login-methods" \
 - `api_base_url`，默认 `https://api.github.com/`。
 - `scope`，默认 `read:user user:email`。
 
+## 微信开放平台网站应用配置
+
+微信开放平台的“授权回调域”填写 Passport 域名，不带协议和路径：
+
+```text
+passport.gooyoit.com
+```
+
+完整回调地址为：
+
+```text
+https://passport.gooyoit.com/oauth/providers/wechat/callback
+```
+
+生产环境先在 `backend/login/.env` 配置 AppSecret：
+
+```dotenv
+PASSPORT_WECHAT_CLIENT_SECRET=YOUR_WECHAT_APP_SECRET
+```
+
+然后为需要微信登录的接入应用保存 AppID 和密钥环境变量名：
+
+```bash
+curl -X POST "https://passport-admin.gooyoit.com/api/admin/applications/APP_DATABASE_ID/login-methods" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $PASSPORT_ADMIN_ACCESS_TOKEN" \
+  -d '{
+    "method": "wechat",
+    "enabled": true,
+    "config": {
+      "client_id": "YOUR_WECHAT_APP_ID",
+      "client_secret_env": "PASSPORT_WECHAT_CLIENT_SECRET",
+      "authorize_url": "https://open.weixin.qq.com/connect/qrconnect",
+      "access_token_url": "https://api.weixin.qq.com/sns/oauth2/access_token",
+      "api_base_url": "https://api.weixin.qq.com/",
+      "scope": "snsapi_login"
+    }
+  }'
+```
+
+微信网站应用不使用公众号的 `snsapi_base` / `snsapi_userinfo`；当前实现基于
+Authlib，默认使用 `qrconnect` 和 `snsapi_login`。
+
 ## 前端登录入口
 
 登录页会根据当前 `client_id` 拼出第三方登录入口：

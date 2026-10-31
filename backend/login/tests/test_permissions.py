@@ -1,55 +1,50 @@
 """Permission calculation tests."""
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app import models
+
+from conftest import create_test_application, request_email_code
 
 
 def test_default_and_explicit_roles_grant_permission_union(
     client: TestClient,
-    admin_headers: dict[str, str],
+    db_session: Session,
 ) -> None:
     """PyCasbin grants permissions from default and explicit roles."""
-    app_response = client.post(
-        "/admin/applications",
-        headers=admin_headers,
-        json={
-            "name": "Ops",
-            "redirect_uris": ["https://ops.example.com/callback"],
-            "enable_public_users": True,
-        },
-    )
-    application = app_response.json()
+    application = create_test_application(db_session, name="Ops", redirect_uris=["https://ops.example.com/callback"])
     application_id = application["id"]
     default_role_id = application["default_role_id"]
 
-    read_permission = client.post(
-        f"/admin/applications/{application_id}/permissions",
-        headers=admin_headers,
-        json={"code": "user.read", "name": "Read users"},
-    ).json()
-    write_permission = client.post(
-        f"/admin/applications/{application_id}/permissions",
-        headers=admin_headers,
-        json={"code": "user.write", "name": "Write users"},
-    ).json()
-    admin_role = client.post(
-        f"/admin/applications/{application_id}/roles",
-        headers=admin_headers,
-        json={"code": "admin", "name": "管理员"},
-    ).json()
-
-    client.post(
-        f"/admin/applications/{application_id}/roles/{default_role_id}/permissions/{read_permission['id']}",
-        headers=admin_headers,
+    read_permission = models.Permission(
+        application_id=application_id, code="user.read", name="Read users"
     )
-    client.post(
-        f"/admin/applications/{application_id}/roles/{admin_role['id']}/permissions/{write_permission['id']}",
-        headers=admin_headers,
+    write_permission = models.Permission(
+        application_id=application_id, code="user.write", name="Write users"
     )
+    db_session.add_all([read_permission, write_permission])
+    db_session.flush()
+    admin_role = models.Role(
+        application_id=application_id, code="admin", name="管理员"
+    )
+    db_session.add(admin_role)
+    db_session.flush()
+    db_session.add_all(
+        [
+            models.RolePermission(
+                role_id=default_role_id, permission_id=read_permission.id
+            ),
+            models.RolePermission(
+                role_id=admin_role.id, permission_id=write_permission.id
+            ),
+        ]
+    )
+    db_session.commit()
 
-    debug_code = client.post(
-        "/auth/email/request-code",
-        json={"client_id": application["client_id"], "email": "admin@example.com"},
-    ).json()["debug_code"]
+    debug_code = request_email_code(
+        client, application["client_id"], "admin@example.com"
+    )["debug_code"]
     auth_code = client.post(
         "/auth/email/login",
         json={
@@ -70,15 +65,16 @@ def test_default_and_explicit_roles_grant_permission_union(
     ).json()
     user_id = token_payload["user"]["id"]
 
-    client.post(
-        f"/admin/applications/{application_id}/users/{user_id}/roles/{admin_role['id']}",
-        headers=admin_headers,
+    db_session.add(
+        models.UserRole(
+            application_id=application_id, user_id=user_id, role_id=admin_role.id
+        )
     )
+    db_session.commit()
 
-    debug_code = client.post(
-        "/auth/email/request-code",
-        json={"client_id": application["client_id"], "email": "admin@example.com"},
-    ).json()["debug_code"]
+    debug_code = request_email_code(
+        client, application["client_id"], "admin@example.com"
+    )["debug_code"]
     auth_code = client.post(
         "/auth/email/login",
         json={
@@ -100,4 +96,3 @@ def test_default_and_explicit_roles_grant_permission_union(
 
     assert sorted(token_payload["roles"]) == ["admin", "member"]
     assert token_payload["permissions"] == ["user.read", "user.write"]
-

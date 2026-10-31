@@ -274,7 +274,8 @@ def upsert_login_method(
         db.add(method)
     else:
         method.enabled = payload.enabled
-        method.config = payload.config or {}
+        if payload.config is not None:
+            method.config = payload.config
     try:
         db.commit()
     except IntegrityError:

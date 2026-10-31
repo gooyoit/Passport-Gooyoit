@@ -41,7 +41,9 @@ export interface Permission {
 
 export interface User {
   id: number;
-  email: string;
+  username: string | null;
+  email: string | null;
+  contact_phone: string | null;
   display_name: string | null;
   avatar_url: string | null;
   status: string;
@@ -51,7 +53,7 @@ export interface ApplicationUser {
   id: number;
   application_id: number;
   user_id: number;
-  user_email: string;
+  user_email: string | null;
   user_display_name: string | null;
   user_status: string;
   status: string;
@@ -66,7 +68,9 @@ export interface TokenExchangeResponse {
   expires_in: number;
   user: {
     id: number;
-    email: string;
+    username: string | null;
+    email: string | null;
+    contact_phone: string | null;
     display_name: string | null;
     status: string;
   };
