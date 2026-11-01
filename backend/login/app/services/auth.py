@@ -27,10 +27,12 @@ from app.models import (
     EmailVerificationCode,
     OAuthAuthorizationCode,
     OAuthToken,
+    PhoneVerificationCode,
     User,
     UserIdentity,
 )
 from app.services.email import send_verification_code
+from app.services.sms import send_sms_code
 from app.services.applications import (
     get_active_application_by_client_id,
     is_login_method_enabled,
@@ -177,6 +179,133 @@ def complete_email_login(
     return auth_code
 
 
+def issue_sms_code(db: Session, *, client_id: str, phone: str, purpose: str = "login") -> str:
+    """Create an SMS verification code and send it."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not is_login_method_enabled(db, application.id, "sms_code"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMS code login is disabled",
+        )
+
+    code = random_digits()
+    if not send_sms_code(phone, code):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send SMS",
+        )
+    db.add(
+        PhoneVerificationCode(
+            phone=phone,
+            code_hash=hash_secret(code),
+            purpose=purpose,
+            expires_at=utcnow() + timedelta(seconds=settings.sms_code_ttl_seconds),
+        )
+    )
+    db.commit()
+    logger.info("sms_code_issued", phone=phone, purpose=purpose)
+    return code
+
+
+def get_or_create_phone_user(db: Session, *, phone: str, application: Application) -> User:
+    """Return the user owning this phone, or auto-register one when allowed."""
+    user = db.scalar(select(User).where(User.phone == phone))
+    if user is not None:
+        if user.phone_verified_at is None:
+            user.phone_verified_at = utcnow()
+        return user
+    if not application.enable_public_users:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phone number is not registered",
+        )
+    user = User(
+        phone=phone,
+        phone_verified_at=utcnow(),
+        display_name=f"{phone[:3]}****{phone[-4:]}" if len(phone) >= 7 else phone,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    db.flush()
+    identity = db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == "phone",
+            UserIdentity.provider_user_id == phone,
+        )
+    )
+    if identity is None:
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider="phone",
+                provider_user_id=phone,
+                raw_profile={},
+            )
+        )
+        db.flush()
+    return user
+
+
+def complete_sms_login(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    phone: str,
+    code: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify an SMS code and log the user in (auto-registering when allowed)."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not validate_redirect_uri(application, redirect_uri):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
+    if not is_login_method_enabled(db, application.id, "sms_code"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMS code login is disabled",
+        )
+
+    now = utcnow()
+    verification = db.scalar(
+        select(PhoneVerificationCode)
+        .where(
+            PhoneVerificationCode.phone == phone,
+            PhoneVerificationCode.purpose == "login",
+            PhoneVerificationCode.used_at.is_(None),
+            PhoneVerificationCode.expires_at > now,
+        )
+        .order_by(PhoneVerificationCode.created_at.desc())
+        .with_for_update()
+    )
+    if verification is None or not verify_secret(code, verification.code_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid SMS code")
+    verification.used_at = now
+
+    user = get_or_create_phone_user(db, phone=phone, application=application)
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
+    logger.info("sms_login_success", phone=phone, user_id=user.id)
+    membership = ensure_application_user(db, application=application, user=user)
+    membership.last_login_at = now
+
+    _set_sso_cookie_if_enabled(db, response, application, user.id)
+
+    auth_code = create_authorization_code(
+        db,
+        application=application,
+        user=user,
+        redirect_uri=redirect_uri,
+    )
+    db.commit()
+    db.refresh(auth_code)
+    return auth_code
+
+
 def complete_password_login(
     db: Session,
     response: Response,
@@ -205,6 +334,7 @@ def complete_password_login(
             or_(
                 func.lower(User.username) == normalized_identifier,
                 func.lower(User.email) == normalized_identifier,
+                func.lower(User.phone) == normalized_identifier,
             )
         )
     )

@@ -74,12 +74,31 @@ class EmailRegisterRequest(BaseModel):
 
 
 class EmailPasswordLoginRequest(BaseModel):
-    """Login with username or email and password."""
+    """Login with username, email, or phone and password."""
 
     client_id: str
     redirect_uri: HttpUrl
     identifier: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=128)
+    state: str | None = None
+
+
+class SmsCodeRequest(BaseModel):
+    """Request an SMS verification code."""
+
+    client_id: str
+    phone: str = Field(min_length=5, max_length=32, pattern=r"^\+?[0-9]{5,20}$")
+    captcha_key: str
+    captcha_answer: str = Field(min_length=1, max_length=10)
+
+
+class SmsLoginRequest(BaseModel):
+    """Complete SMS code login."""
+
+    client_id: str
+    redirect_uri: HttpUrl
+    phone: str = Field(min_length=5, max_length=32, pattern=r"^\+?[0-9]{5,20}$")
+    code: str = Field(min_length=4, max_length=12)
     state: str | None = None
 
 

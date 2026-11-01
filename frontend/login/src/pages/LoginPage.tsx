@@ -9,12 +9,13 @@ import { useCaptcha } from "../hooks/useCaptcha";
 
 type FormEvent = React.FormEvent;
 
-export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "register") => void }) {
+export default function LoginPage() {
   const { t } = useTranslation();
   const oauth = useOAuthParams();
-  const [mode, setMode] = useState<"code" | "password">("code");
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"sms" | "password">("sms");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
   const [debugCode, setDebugCode] = useState("");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
   const [allowRegistration, setAllowRegistration] = useState(false);
-  const [emailPasswordEnabled, setEmailPasswordEnabled] = useState(false);
+  const [passwordEnabled, setPasswordEnabled] = useState(true);
   const [appName, setAppName] = useState(oauth.appName);
   const {
     captchaKey,
@@ -58,14 +59,13 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
       }
       if (methods.length > 0) {
         setLoginMethods(methods);
-        setEmailPasswordEnabled(methods.includes("email_password"));
-        if (!methods.includes("email_code")) {
+        setPasswordEnabled(methods.includes("email_password"));
+        if (!methods.includes("sms_code")) {
           setMode("password");
         }
       }
     }).catch(() => {
-      setLoginMethods(["email_code"]);
-      setEmailPasswordEnabled(true);
+      setLoginMethods(["sms_code"]);
     });
   }, []);
 
@@ -75,9 +75,9 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  async function requestCode(e: FormEvent) {
+  async function requestCode(e: React.MouseEvent) {
     e.preventDefault();
-    if (cooldown > 0) return;
+    if (cooldown > 0 || !phone) return;
     await fetchCaptcha();
     setShowCaptchaModal(true);
   }
@@ -91,10 +91,10 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     setCaptchaError("");
     try {
       const r = await api<{ sent: boolean; debug_code?: string }>(
-        "/auth/email/request-code",
+        "/auth/sms/request-code",
         {
           method: "POST",
-          body: JSON.stringify({ client_id: oauth.clientId, email, captcha_key: captchaKey, captcha_answer: captchaAnswer }),
+          body: JSON.stringify({ client_id: oauth.clientId, phone, captcha_key: captchaKey, captcha_answer: captchaAnswer }),
         },
       );
       if (import.meta.env.DEV) setDebugCode(r.debug_code ?? "");
@@ -103,12 +103,12 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
       setCooldown(60);
       setShowCaptchaModal(false);
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg.includes("429") || msg.includes("Too Many")) {
+      const m = (err as Error).message;
+      if (m.includes("rate limit") || m.includes("Too Many")) {
         setShowCaptchaModal(false);
         setCodeMsg(t("login.tooFrequent"));
       } else {
-        setCaptchaError(msg);
+        setCaptchaError(m);
         fetchCaptcha();
         setCaptchaAnswer("");
       }
@@ -122,13 +122,13 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     setLoading(true);
     setMsg("");
     try {
-      if (mode === "code") {
-        const r = await api<{ redirect_uri: string }>("/auth/email/login", {
+      if (mode === "sms") {
+        const r = await api<{ redirect_uri: string }>("/auth/sms/login", {
           method: "POST",
           body: JSON.stringify({
             client_id: oauth.clientId,
             redirect_uri: oauth.redirectUri,
-            email,
+            phone,
             code,
             state: oauth.state,
           }),
@@ -141,7 +141,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
           body: JSON.stringify({
             client_id: oauth.clientId,
             redirect_uri: oauth.redirectUri,
-            identifier: email,
+            identifier,
             password,
             state: oauth.state,
           }),
@@ -220,6 +220,8 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
     }
   }
 
+  const smsAvailable = loginMethods.length === 0 || loginMethods.includes("sms_code");
+
   return (
     <main className="shell">
       <Showcase />
@@ -232,77 +234,105 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
             <h1>{t("login.title", { appName })}</h1>
           </div>
 
-          <form className="email-form" onSubmit={login}>
-            <label className="field mode-field">
-              <span>{mode === "code" ? t("login.email") : t("login.identifier")}</span>
-              <div className="input-with-action">
-                <input
-                  type={mode === "code" ? "email" : "text"}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={mode === "code" ? "m@example.com" : t("login.identifierPlaceholder")}
-                  required
-                />
-                {emailPasswordEnabled && (
-                <button
-                  type="button"
-                  className="text-btn mode-switch"
-                  onClick={() => {
-                    setMode(mode === "code" ? "password" : "code");
-                    setMsg("");
-                  }}
-                >
-                  {mode === "code" ? t("login.loginByPwd") : t("login.loginByCode")}
-                </button>
-                )}
-              </div>
-            </label>
+          {(smsAvailable || passwordEnabled) && (
+          <div className="setup-tabs login-tabs" role="tablist">
+            {smsAvailable && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "sms"}
+              className={mode === "sms" ? "active" : ""}
+              onClick={() => { setMode("sms"); setMsg(""); }}
+            >
+              {t("login.tabSms")}
+            </button>
+            )}
+            {passwordEnabled && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "password"}
+              className={mode === "password" ? "active" : ""}
+              onClick={() => { setMode("password"); setMsg(""); }}
+            >
+              {t("login.tabPassword")}
+            </button>
+            )}
+          </div>
+          )}
 
-            {mode === "code" ? (
+          <form className="email-form" onSubmit={login}>
+            {mode === "sms" ? (
               <>
                 <label className="field">
-                <span>{t("login.code")}</span>
-                <div className="code-row">
+                  <span>{t("login.phone")}</span>
                   <input
-                    type="text"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder={t("login.codePlaceholder")}
-                    maxLength={6}
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder={t("login.phonePlaceholder")}
+                    autoComplete="tel"
                     required
                   />
-                  <button
-                    type="button"
-                    className="send-code-btn inline"
-                    onClick={requestCode}
-                    disabled={loading || !email || cooldown > 0}
-                  >
-                    {cooldown > 0 ? `${cooldown}s` : codeSent ? t("login.resend") : t("login.sendCode")}
-                  </button>
-                  {codeMsg && <p className="field-msg">{codeMsg}</p>}
-                </div>
-              </label>
+                </label>
+                <label className="field">
+                  <span>{t("login.code")}</span>
+                  <div className="code-row">
+                    <input
+                      type="text"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder={t("login.codePlaceholder")}
+                      maxLength={6}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="send-code-btn inline"
+                      onClick={requestCode}
+                      disabled={loading || !phone || cooldown > 0}
+                    >
+                      {cooldown > 0 ? `${cooldown}s` : codeSent ? t("login.resend") : t("login.sendCode")}
+                    </button>
+                    {codeMsg && <p className="field-msg">{codeMsg}</p>}
+                  </div>
+                </label>
               </>
             ) : (
-              <label className="field">
-                <span>{t("login.password")}</span>
-                <div className="pwd-wrap">
+              <>
+                <label className="field">
+                  <span>{t("login.identifier")}</span>
                   <input
-                    type={showPwd ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={t("login.pwdPlaceholder")}
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder={t("login.identifierPlaceholder")}
+                    autoComplete="username"
                     required
                   />
-                  <button
-                    type="button"
-                    className="pwd-toggle"
-                    onClick={() => setShowPwd(!showPwd)}
-                  >
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </label>
+                </label>
+                <label className="field">
+                  <span>{t("login.password")}</span>
+                  <div className="pwd-wrap">
+                    <input
+                      type={showPwd ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={t("login.pwdPlaceholder")}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="pwd-toggle"
+                      onClick={() => setShowPwd(!showPwd)}
+                      aria-label="toggle password"
+                    >
+                      {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </label>
+              </>
             )}
 
             <button
@@ -360,11 +390,8 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
           </button>
           )}
 
-          {allowRegistration && (
-          <p className="switch-text">
-            {t("login.noAccount")}
-            <button onClick={() => onSwitch("register")}>{t("login.register")}</button>
-          </p>
+          {allowRegistration && smsAvailable && (
+            <p className="switch-text">{t("login.autoRegister")}</p>
           )}
           <p className="switch-text">
             <a href="/account/settings">{t("login.accountSettings")}</a>

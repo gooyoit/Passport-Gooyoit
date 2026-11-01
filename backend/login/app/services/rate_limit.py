@@ -78,6 +78,25 @@ def check_login_lockout(redis_client: Redis | None, email: str, ip: str) -> None
         raise RateLimitExceeded("Account temporarily locked", redis_client.ttl(key))
 
 
+def check_sms_rate_limit(redis_client: Redis | None, phone: str, ip: str) -> None:
+    """Industry-standard SMS throttling: per-phone minute/hour/day and per-IP hour/day."""
+    if redis_client is None:
+        return
+
+    def _window(key: str, seconds: int, limit: int) -> None:
+        count = redis_client.incr(key)
+        if count == 1:
+            redis_client.expire(key, seconds)
+        if count > limit:
+            raise RateLimitExceeded("SMS rate limit exceeded", redis_client.ttl(key))
+
+    _window(f"rl:sms:phone:m:{phone}", 60, settings.sms_rate_phone_per_minute)
+    _window(f"rl:sms:phone:h:{phone}", 3600, settings.sms_rate_phone_per_hour)
+    _window(f"rl:sms:phone:d:{phone}", 86400, settings.sms_rate_phone_per_day)
+    _window(f"rl:sms:ip:h:{ip}", 3600, settings.sms_rate_ip_per_hour)
+    _window(f"rl:sms:ip:d:{ip}", 86400, settings.sms_rate_ip_per_day)
+
+
 def check_registration_rate_limit(redis_client: Redis | None, ip: str) -> None:
     if redis_client is None:
         return

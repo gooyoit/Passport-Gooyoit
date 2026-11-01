@@ -23,6 +23,8 @@ from app.schemas import (
     EmailLoginResponse,
     EmailPasswordLoginRequest,
     EmailRegisterRequest,
+    SmsCodeRequest,
+    SmsLoginRequest,
     WebAuthnBeginRequest,
     WebAuthnBeginResponse,
     WebAuthnVerifyRequest,
@@ -41,7 +43,9 @@ from app.services.auth import (
     complete_email_login,
     complete_email_register,
     complete_password_login,
+    complete_sms_login,
     issue_email_code,
+    issue_sms_code,
 )
 from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
@@ -49,6 +53,7 @@ from app.services.rate_limit import (
     check_login_lockout,
     check_registration_rate_limit,
     check_request_code_rate_limit,
+    check_sms_rate_limit,
     clear_failed_login,
     get_client_ip,
     record_failed_login,
@@ -281,6 +286,59 @@ def email_password_login(
         clear_failed_login(redis_client, normalized_identifier, get_client_ip(request))
 
     logger.info("password_login_success", identifier=payload.identifier)
+    return EmailLoginResponse(
+        code=auth_code.code,
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
+        state=payload.state,
+    )
+
+
+@router.post("/sms/request-code", response_model=EmailCodeResponse)
+def request_sms_code(
+    payload: SmsCodeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EmailCodeResponse:
+    """Request an SMS login code (captcha-gated, throttled)."""
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    try:
+        check_sms_rate_limit(redis_client, payload.phone, client_ip)
+    except RateLimitExceeded as e:
+        logger.warning("rate_limited", label="sms_code", phone=payload.phone, client_ip=client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
+    if not verify_captcha(redis_client, payload.captcha_key, payload.captcha_answer):
+        logger.warning("captcha_verification_failed", phone=payload.phone)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired captcha",
+        )
+
+    code = issue_sms_code(db, client_id=payload.client_id, phone=payload.phone)
+    return EmailCodeResponse(sent=True, debug_code=code if settings.debug else None)
+
+
+@router.post("/sms/login", response_model=EmailLoginResponse)
+def sms_login(
+    payload: SmsLoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> EmailLoginResponse:
+    """Complete SMS code login and return an authorization code."""
+    auth_code = complete_sms_login(
+        db,
+        response,
+        client_id=payload.client_id,
+        phone=payload.phone,
+        code=payload.code,
+        redirect_uri=str(payload.redirect_uri),
+        state=payload.state,
+    )
     return EmailLoginResponse(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",

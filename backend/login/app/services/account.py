@@ -46,13 +46,14 @@ def consume_bind_email_code(db: Session, *, email: str, code: str | None) -> Non
 
 
 def find_local_user(db: Session, *, identifier: str) -> User | None:
-    """Return the user whose username or email matches the identifier."""
+    """Return the user whose username, email, or phone matches the identifier."""
     normalized = identifier.strip().lower()
     return db.scalar(
         select(User).where(
             or_(
                 func.lower(User.username) == normalized,
                 func.lower(User.email) == normalized,
+                func.lower(User.phone) == normalized,
             )
         )
     )
