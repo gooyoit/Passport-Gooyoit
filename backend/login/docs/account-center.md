@@ -182,12 +182,42 @@ curl -X POST -H "Authorization: Bearer <access_token>" \
 
 用户即可在登录页使用「用户名或邮箱 + 密码」登录（`POST /auth/email/login-password`，见 `INTEGRATION.md`）。业务系统无需任何改动。
 
+## 退出登录（必须顶层跳转）
+
+业务系统与 Passport **不在同一个域名**时，`passport.gooyoit.com` 的 SSO cookie 不会随业务系统的 fetch 请求携带（浏览器的第三方 cookie 规则），因此 `POST /oauth/logout` 的 `global_logout` 在跨域场景下**无法撤销 SSO 会话**——用户"退出登录"后仍能进入 Passport 账号中心。
+
+正确的退出姿势（RP-Initiated Logout，Auth0/Keycloak 同款模式）是**浏览器顶层跳转**到 Passport 的登出端点：
+
+```js
+// 业务系统退出时：先清理自己的会话，然后整页跳转
+window.location.href =
+  "https://passport.gooyoit.com/api/auth/logout" +
+  "?post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
+```
+
+`GET /auth/logout` 会：撤销 Passport 的 SSO 会话 → 清除 SSO cookie → 302 跳转到 `post_logout_redirect_uri`。
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `post_logout_redirect_uri` | 否 | 退出后的回跳地址。**必须与某个已注册应用的 redirect_uri 同源**（协议+域名+端口一致），否则回跳 Passport 登录页 |
+
+完整退出流程建议：
+
+```
+1. 业务系统清理本地会话（自己的 cookie/storage 里的 token）
+2. 服务端调 POST /oauth/logout {refresh_token} 撤销 refresh token（可选但推荐）
+3. window.location.href = "https://passport.gooyoit.com/api/auth/logout?post_logout_redirect_uri=..."
+```
+
+错误码：无（端点始终 302；无 cookie 时也正常返回）。
+
 ## 注意事项
 
 1. **CORS**：浏览器端跨域直调时需将业务系统域名加入 Passport 的 `frontend_origins` 白名单；推荐业务系统由服务端转发调用，避免暴露 token 与 CORS 问题。
 2. **token 窗口**：access_token 有效期 2 小时，过期后用 refresh_token 换新（`POST /oauth/token/refresh`）。
 3. **不要在客户端解码 token**：将 access_token 视为 opaque 字符串。
 4. **安全边界**：绑定邮箱必须通过邮箱验证码证明所有权；覆盖已有密码必须提供当前密码。业务系统无法替用户绕过这两道证明。
+5. **退出必须顶层跳转**：见上文「退出登录」——跨域 fetch 撤不掉 SSO 会话。
 
 ## 集成场景示例
 

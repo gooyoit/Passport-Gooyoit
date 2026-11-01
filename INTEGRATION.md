@@ -130,3 +130,15 @@ curl https://passport.gooyoit.com/api/oauth/providers/google?client_id=你的CLI
 ## 账号补全（用户绑定邮箱 / 密码）
 
 第三方登录（微信等）的用户可能跳过账号完善步骤。业务系统可检测并在自己的产品内引导用户补绑邮箱、设置密码，也可直接链接到 Passport 账号中心页 `https://passport.gooyoit.com/account/settings`。接口与示例见 [backend/login/docs/account-center.md](backend/login/docs/account-center.md)。
+
+## 退出登录
+
+跨域场景下业务系统的 fetch 请求带不上 Passport 域的 SSO cookie，`POST /oauth/logout` 的 `global_logout` 无法撤销单点登录会话。业务系统退出时必须**浏览器顶层跳转**到 Passport 登出端点：
+
+```js
+window.location.href =
+  "https://passport.gooyoit.com/api/auth/logout" +
+  "?post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
+```
+
+`post_logout_redirect_uri` 必须与已注册应用的 redirect_uri 同源，否则回跳 Passport 登录页。完整说明见 [backend/login/docs/account-center.md](backend/login/docs/account-center.md) 的「退出登录」章节。
