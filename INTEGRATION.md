@@ -138,7 +138,8 @@ curl https://passport.gooyoit.com/api/oauth/providers/google?client_id=你的CLI
 ```js
 window.location.href =
   "https://passport.gooyoit.com/api/auth/logout" +
-  "?post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
+  "?client_id=" + encodeURIComponent("你的CLIENT_ID") +
+  "&post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
 ```
 
-`post_logout_redirect_uri` 必须与已注册应用的 redirect_uri 同源，否则回跳 Passport 登录页。完整说明见 [backend/login/docs/account-center.md](backend/login/docs/account-center.md) 的「退出登录」章节。
+`client_id` 必填；`post_logout_redirect_uri` 必须与该应用自己注册的 redirect_uri 同源，否则回跳 Passport 登录页。完整说明见 [backend/login/docs/account-center.md](backend/login/docs/account-center.md) 的「退出登录」章节。

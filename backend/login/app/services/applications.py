@@ -22,18 +22,19 @@ def validate_redirect_uri(application: Application, redirect_uri: str) -> bool:
     return redirect_uri in application.redirect_uris
 
 
-def is_allowed_logout_redirect(db: Session, url: str) -> bool:
-    """Return whether a logout redirect target shares an origin with any
-    registered application redirect URI (open-redirect guard)."""
+def is_allowed_logout_redirect(db: Session, url: str, client_id: str) -> bool:
+    """Return whether a logout redirect target shares an origin with the
+    calling application's registered redirect URIs (open-redirect guard)."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        return False
     target = urlsplit(url)
     if target.scheme not in ("http", "https") or not target.netloc:
         return False
     origin = f"{target.scheme}://{target.netloc}"
-    registered = db.scalars(select(Application.redirect_uris)).all()
     return any(
         f"{urlsplit(uri).scheme}://{urlsplit(uri).netloc}" == origin
-        for uris in registered
-        for uri in uris
+        for uri in application.redirect_uris
     )
 
 

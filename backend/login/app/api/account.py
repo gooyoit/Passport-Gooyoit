@@ -30,8 +30,11 @@ from app.services.auth import SSO_COOKIE_NAME, issue_email_code, set_sso_cookie
 from app.services.captcha import verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
+    check_login_lockout,
     check_request_code_rate_limit,
+    clear_failed_login,
     get_client_ip,
+    record_failed_login,
 )
 from app.services.sso import create_sso_session, revoke_sso_session
 
@@ -141,6 +144,15 @@ def update_credentials(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Nothing to update",
         )
+    if payload.password is not None and application_id is not None:
+        # An application access token speaks for one app's session, not for
+        # global account control; setting the first password with it would
+        # hand that app the account's keys. Route password changes through
+        # the Passport account center (SSO session) instead.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password changes are only available in the Passport account center",
+        )
     try:
         set_account_credentials(
             db,
@@ -176,10 +188,29 @@ def link_existing_account(
     cookie callers get their SSO session rotated onto it.
     """
     user, application_id = account
+    # This endpoint verifies an existing account's password: apply the same
+    # lockout the login path uses so a valid token cannot brute-force it.
+    identifier = payload.identifier.strip().lower()
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    try:
+        check_login_lockout(redis_client, identifier, client_ip)
+    except RateLimitExceeded as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
     old_sso_token = request.cookies.get(SSO_COOKIE_NAME)
-    target = link_current_user_to_existing(
-        db, current_user=user, identifier=payload.identifier, password=payload.password
-    )
+    try:
+        target = link_current_user_to_existing(
+            db, current_user=user, identifier=payload.identifier, password=payload.password
+        )
+    except HTTPException as exc:
+        if exc.status_code in (400, 401):
+            record_failed_login(redis_client, identifier, client_ip)
+        raise
+    clear_failed_login(redis_client, identifier, client_ip)
     db.commit()
 
     result = AccountLinkResponse(profile=get_account_profile(db, user=target))

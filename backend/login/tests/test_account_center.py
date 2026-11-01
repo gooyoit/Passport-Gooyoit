@@ -10,7 +10,7 @@ from app.core.security import create_access_token, hash_password
 from app.models import ApplicationUser, User, UserIdentity
 from app.services.sso import create_sso_session
 
-from conftest import create_test_application, request_email_code
+from conftest import FakeRedis, create_test_application, request_email_code
 
 
 def _wechat_skip_user(db_session: Session) -> User:
@@ -201,9 +201,17 @@ def test_credentials_enable_password_login(
     user = _wechat_skip_user(db_session)
     headers, application = _bearer(db_session, user)
 
-    response = client.post(
+    # Bearer tokens speak for one app's session, not global account control.
+    forbidden = client.post(
         "/account/credentials",
         headers=headers,
+        json={"username": "center_user", "password": "StrongPass1!"},
+    )
+    assert forbidden.status_code == 403
+
+    client.cookies.set("passport_sso", create_sso_session(db_session, user_id=user.id))
+    response = client.post(
+        "/account/credentials",
         json={"username": "center_user", "password": "StrongPass1!"},
     )
     assert response.status_code == 200, response.text
@@ -222,7 +230,6 @@ def test_credentials_enable_password_login(
 
     conflict = client.post(
         "/account/credentials",
-        headers=headers,
         json={"username": "center_user"},
     )
     assert conflict.status_code == 200  # idempotent same-username update
@@ -231,16 +238,16 @@ def test_credentials_enable_password_login(
     db_session.add(duplicate_holder)
     db_session.commit()
     duplicate = client.post(
-        "/account/credentials", headers=headers, json={"username": "taken_name"}
+        "/account/credentials", json={"username": "taken_name"}
     )
     assert duplicate.status_code == 409
 
     weak = client.post(
-        "/account/credentials", headers=headers, json={"password": "password"}
+        "/account/credentials", json={"password": "password"}
     )
     assert weak.status_code == 422
 
-    empty = client.post("/account/credentials", headers=headers, json={})
+    empty = client.post("/account/credentials", json={})
     assert empty.status_code == 400
 
 
@@ -255,30 +262,27 @@ def test_credentials_overwrite_password_needs_current_password(
     )
     db_session.add(user)
     db_session.commit()
-    headers, _ = _bearer(db_session, user)
+    client.cookies.set("passport_sso", create_sso_session(db_session, user_id=user.id))
 
     missing = client.post(
-        "/account/credentials", headers=headers, json={"password": "NewPass1!"}
+        "/account/credentials", json={"password": "NewPass1!"}
     )
     assert missing.status_code == 401
 
     wrong = client.post(
         "/account/credentials",
-        headers=headers,
         json={"password": "NewPass1!", "current_password": "WrongPass1!"},
     )
     assert wrong.status_code == 401
 
     ok = client.post(
         "/account/credentials",
-        headers=headers,
         json={"password": "NewPass1!", "current_password": "OldPass1!"},
     )
     assert ok.status_code == 200
 
     phone = client.post(
         "/account/credentials",
-        headers=headers,
         json={"contact_phone": "+86 138-0013-8000"},
     )
     assert phone.status_code == 200
@@ -477,7 +481,10 @@ def test_browser_logout_revokes_sso_and_redirects(
 
     allowed = client.get(
         "/auth/logout",
-        params={"post_logout_redirect_uri": "https://crm.example.com/login"},
+        params={
+            "client_id": application["client_id"],
+            "post_logout_redirect_uri": "https://crm.example.com/login",
+        },
         follow_redirects=False,
     )
     assert allowed.status_code == 302
@@ -485,11 +492,29 @@ def test_browser_logout_revokes_sso_and_redirects(
 
     outside = client.get(
         "/auth/logout",
-        params={"post_logout_redirect_uri": "https://evil.example.com/phish"},
+        params={
+            "client_id": application["client_id"],
+            "post_logout_redirect_uri": "https://evil.example.com/phish",
+        },
         follow_redirects=False,
     )
     assert outside.status_code == 302
     assert outside.headers["location"] == "/"
+
+    # Cross-tenant: another registered app's origin is not allowed either.
+    other = create_test_application(
+        db_session, name="Other", redirect_uris=["https://other.example.com/cb"]
+    )
+    cross = client.get(
+        "/auth/logout",
+        params={
+            "client_id": other["client_id"],
+            "post_logout_redirect_uri": "https://crm.example.com/home",
+        },
+        follow_redirects=False,
+    )
+    assert cross.status_code == 302
+    assert cross.headers["location"] == "/"
 
     db_session.expire_all()
     revoked = (
@@ -528,3 +553,35 @@ def test_registration_hidden_and_rejected_when_public_signup_disabled(
     )
     assert rejected.status_code == 400
     assert rejected.json()["detail"] == "Registration is disabled"
+
+
+def test_link_existing_locks_out_brute_force(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Repeated wrong merge passwords trigger the lockout."""
+    from app.api import account as account_api
+
+    class LockRedis(FakeRedis):
+        pass
+
+    redis = LockRedis()
+    monkeypatch.setattr(account_api, "get_redis_client", lambda: redis)
+
+    bare = _wechat_skip_user(db_session)
+    alice = _local_account(db_session)
+    headers, _ = _bearer(db_session, bare)
+
+    for _ in range(5):
+        response = client.post(
+            "/account/link-existing",
+            headers=headers,
+            json={"identifier": "alice", "password": "WrongPass1!"},
+        )
+        assert response.status_code == 401
+
+    locked = client.post(
+        "/account/link-existing",
+        headers=headers,
+        json={"identifier": "alice", "password": "OldPass1!"},
+    )
+    assert locked.status_code == 429

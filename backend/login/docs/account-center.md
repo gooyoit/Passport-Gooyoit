@@ -169,6 +169,8 @@ curl -X POST -H "Authorization: Bearer <access_token>" \
 | `contact_phone` | 否 | 去除空格和括号后 7-20 位数字，可带 `+` 前缀 |
 | `current_password` | 条件 | **覆盖已有密码时必填**；首次设置密码不需要 |
 
+> **密码变更仅限 Passport 账号中心**：带 Bearer access_token 的调用（业务系统）**不能设置或修改密码**（返回 `403`）——应用级 token 不代表全局账号控制权。业务系统如需引导用户设置密码，请放一个链接跳转到 `https://passport.gooyoit.com/account/settings`（用户凭 SSO 会话直接操作）。用户名和手机号不受此限制。
+
 ```bash
 curl -X POST -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
@@ -192,14 +194,16 @@ curl -X POST -H "Authorization: Bearer <access_token>" \
 // 业务系统退出时：先清理自己的会话，然后整页跳转
 window.location.href =
   "https://passport.gooyoit.com/api/auth/logout" +
-  "?post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
+  "?client_id=" + encodeURIComponent("你的CLIENT_ID") +
+  "&post_logout_redirect_uri=" + encodeURIComponent("https://your-app.example.com/login");
 ```
 
 `GET /auth/logout` 会：撤销 Passport 的 SSO 会话 → 清除 SSO cookie → 302 跳转到 `post_logout_redirect_uri`。
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `post_logout_redirect_uri` | 否 | 退出后的回跳地址。**必须与某个已注册应用的 redirect_uri 同源**（协议+域名+端口一致），否则回跳 Passport 登录页 |
+| `client_id` | 是 | 发起登出的业务系统的 client_id |
+| `post_logout_redirect_uri` | 否 | 退出后的回跳地址。**必须与该 client_id 自己注册的 redirect_uri 同源**（协议+域名+端口一致），否则回跳 Passport 登录页 |
 
 完整退出流程建议：
 

@@ -88,13 +88,16 @@ def account_setup_context(
 def browser_logout(
     request: Request,
     response: Response,
+    client_id: str,
     post_logout_redirect_uri: str | None = None,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """Top-level logout for relying parties (RP-initiated logout).
 
     Business apps on other origins cannot clear this domain's SSO cookie
-    via fetch; they should navigate the browser here instead.
+    via fetch; they should navigate the browser here instead. The
+    post-logout redirect must share an origin with client_id's own
+    registered redirect URIs.
     """
     token = request.cookies.get(SSO_COOKIE_NAME)
     if token:
@@ -103,7 +106,7 @@ def browser_logout(
     clear_sso_cookie(response)
     target = "/"
     if post_logout_redirect_uri and is_allowed_logout_redirect(
-        db, post_logout_redirect_uri
+        db, post_logout_redirect_uri, client_id
     ):
         target = post_logout_redirect_uri
     return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
