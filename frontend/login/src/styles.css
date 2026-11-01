@@ -1056,3 +1056,8 @@ h1 {
   color: var(--text-muted);
   font-size: 12px;
 }
+
+.settings-signout {
+  align-self: center;
+  margin-top: 4px;
+}

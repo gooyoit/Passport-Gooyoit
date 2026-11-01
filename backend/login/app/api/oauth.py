@@ -27,12 +27,14 @@ from app.services.applications import get_active_application_by_client_id, valid
 from app.services.account_setup import create_pending_account_setup
 from app.services.auth import (
     SSO_COOKIE_NAME,
+    clear_sso_cookie,
     ensure_application_user,
     exchange_authorization_code,
     create_authorization_code,
     get_or_create_oauth_user,
     refresh_access_token,
     revoke_refresh_token,
+    set_sso_cookie,
 )
 from app.services.oauth_providers import (
     authorize_redirect,
@@ -238,14 +240,7 @@ async def oauth_provider_callback(
     response = RedirectResponse(location)
     if application.enable_sso:
         sso_token = create_sso_session(db, user_id=user.id)
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+        set_sso_cookie(response, sso_token)
     return response
 
 
@@ -323,7 +318,7 @@ def logout(
     sso_revoked = False
     if payload.global_logout:
         sso_revoked = revoke_sso_session(db, token=request.cookies.get(SSO_COOKIE_NAME))
-        response.delete_cookie(SSO_COOKIE_NAME)
+        clear_sso_cookie(response)
 
     return {"refresh_token_revoked": refresh_revoked, "sso_session_revoked": sso_revoked}
 

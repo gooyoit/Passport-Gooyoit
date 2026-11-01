@@ -26,7 +26,7 @@ from app.services.account import (
     link_current_user_to_existing,
     set_account_credentials,
 )
-from app.services.auth import SSO_COOKIE_NAME, issue_email_code
+from app.services.auth import SSO_COOKIE_NAME, issue_email_code, set_sso_cookie
 from app.services.captcha import verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
@@ -194,13 +194,6 @@ def link_existing_account(
         revoke_sso_session(db, token=old_sso_token)
         sso_token = create_sso_session(db, user_id=target.id)
         db.commit()
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+        set_sso_cookie(response, sso_token)
     logger.info("account_linked_existing", user_id=target.id, via=_via(application_id))
     return result

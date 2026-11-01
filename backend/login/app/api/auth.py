@@ -4,6 +4,7 @@ import structlog
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 logger = structlog.get_logger(__name__)
@@ -30,8 +31,18 @@ from app.schemas import (
     WebAuthnRegisterFinishRequest,
 )
 from app.services.account_setup import complete_account_setup, get_pending_account_setup
-from app.services.applications import get_active_application_by_client_id
-from app.services.auth import complete_email_login, complete_email_register, complete_password_login, issue_email_code
+from app.services.applications import (
+    get_active_application_by_client_id,
+    is_allowed_logout_redirect,
+)
+from app.services.auth import (
+    SSO_COOKIE_NAME,
+    clear_sso_cookie,
+    complete_email_login,
+    complete_email_register,
+    complete_password_login,
+    issue_email_code,
+)
 from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
@@ -42,6 +53,7 @@ from app.services.rate_limit import (
     get_client_ip,
     record_failed_login,
 )
+from app.services.sso import revoke_sso_session
 from app.services.webauthn_service import (
     begin_authentication,
     verify_authentication,
@@ -70,6 +82,31 @@ def account_setup_context(
         application_name=application.name,
         client_id=application.client_id,
     )
+
+
+@router.get("/logout")
+def browser_logout(
+    request: Request,
+    response: Response,
+    post_logout_redirect_uri: str | None = None,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """Top-level logout for relying parties (RP-initiated logout).
+
+    Business apps on other origins cannot clear this domain's SSO cookie
+    via fetch; they should navigate the browser here instead.
+    """
+    token = request.cookies.get(SSO_COOKIE_NAME)
+    if token:
+        revoke_sso_session(db, token=token)
+        db.commit()
+    clear_sso_cookie(response)
+    target = "/"
+    if post_logout_redirect_uri and is_allowed_logout_redirect(
+        db, post_logout_redirect_uri
+    ):
+        target = post_logout_redirect_uri
+    return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/account-setup", response_model=AccountSetupResponse)

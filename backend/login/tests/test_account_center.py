@@ -455,3 +455,47 @@ def test_link_existing_via_sso_cookie_rotates_session(
     assert profile.status_code == 200
     assert profile.json()["user"]["id"] == alice.id
     client.cookies.delete("passport_sso")
+
+
+def test_browser_logout_revokes_sso_and_redirects(
+    client: TestClient, db_session: Session
+) -> None:
+    """Top-level logout kills the SSO session and honors origin-whitelisted
+    return URLs."""
+    from app.models import SsoSession
+
+    user = _wechat_skip_user(db_session)
+    application = create_test_application(
+        db_session, redirect_uris=["https://crm.example.com/callback"]
+    )
+    token = create_sso_session(db_session, user_id=user.id)
+    db_session.commit()
+    session_id_hash = (
+        db_session.query(SsoSession).filter_by(user_id=user.id).one().session_id_hash
+    )
+    client.cookies.set("passport_sso", token)
+
+    allowed = client.get(
+        "/auth/logout",
+        params={"post_logout_redirect_uri": "https://crm.example.com/login"},
+        follow_redirects=False,
+    )
+    assert allowed.status_code == 302
+    assert allowed.headers["location"] == "https://crm.example.com/login"
+
+    outside = client.get(
+        "/auth/logout",
+        params={"post_logout_redirect_uri": "https://evil.example.com/phish"},
+        follow_redirects=False,
+    )
+    assert outside.status_code == 302
+    assert outside.headers["location"] == "/"
+
+    db_session.expire_all()
+    revoked = (
+        db_session.query(SsoSession)
+        .filter_by(session_id_hash=session_id_hash)
+        .one()
+        .revoked_at
+    )
+    assert revoked is not None

@@ -44,19 +44,29 @@ logger = structlog.get_logger(__name__)
 SSO_COOKIE_NAME = "passport_sso"
 
 
+def set_sso_cookie(response: Response, token: str) -> None:
+    """Write the SSO cookie, shared across subdomains when configured."""
+    response.set_cookie(
+        SSO_COOKIE_NAME,
+        token,
+        max_age=settings.sso_session_ttl_seconds,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        domain=settings.sso_cookie_domain or None,
+    )
+
+
+def clear_sso_cookie(response: Response) -> None:
+    response.delete_cookie(SSO_COOKIE_NAME, domain=settings.sso_cookie_domain or None)
+
+
 def _set_sso_cookie_if_enabled(
     db: Session, response: Response, application: Application, user_id: int
 ) -> None:
     if application.enable_sso:
         sso_token = create_sso_session(db, user_id=user_id)
-        response.set_cookie(
-            SSO_COOKIE_NAME,
-            sso_token,
-            max_age=settings.sso_session_ttl_seconds,
-            httponly=True,
-            secure=settings.cookie_secure,
-            samesite="lax",
-        )
+        set_sso_cookie(response, sso_token)
 
 
 def verify_client_secret(db: Session, application: Application, client_secret: str) -> bool:

@@ -129,6 +129,7 @@
     "mergePassword": "Password of the existing account",
     "mergeSubmit": "Verify and merge",
     "merged": "Accounts merged — your sign-in methods now live on the existing account",
-    "accountId": "Passport ID "
+    "accountId": "Passport ID ",
+    "signOut": "Sign out of Passport"
   }
 }

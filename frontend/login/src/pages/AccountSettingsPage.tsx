@@ -406,6 +406,7 @@ export default function AccountSettingsPage() {
         <p className="settings-footer">
           <CheckCircle2 size={14} /> {t("accountSettings.footer")}
         </p>
+        <a className="text-btn settings-signout" href="/api/auth/logout">{t("accountSettings.signOut")}</a>
       </div>
 
       {captcha.showCaptchaModal && (

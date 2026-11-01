@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     rate_limit_failed_attempts: int = 5
     rate_limit_lockout_seconds: int = 900
     sso_session_ttl_seconds: int = 604_800
+    sso_cookie_domain: str = ""
     account_setup_ttl_seconds: int = 600
     log_file: str = "logs/login.log"
     webauthn_rp_id: str = "localhost"
