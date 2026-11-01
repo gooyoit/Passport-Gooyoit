@@ -23,6 +23,7 @@ def upgrade() -> None:
         sa.Column("phone", sa.String(length=32), nullable=False, index=True),
         sa.Column("code_hash", sa.String(length=255), nullable=False),
         sa.Column("purpose", sa.String(length=64), nullable=False, index=True),
+        sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True)),
         sa.Column(

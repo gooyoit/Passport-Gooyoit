@@ -182,3 +182,68 @@ def test_sms_rate_limit_blocks_burst(
         else:
             assert first == 200
             assert response.status_code == 429
+
+
+def test_sms_code_burns_after_repeated_wrong_guesses(
+    client: TestClient, db_session: Session, sms_sender
+) -> None:
+    """Five wrong code guesses invalidate the code even if leaked later."""
+    application = create_test_application(db_session, login_methods=["sms_code"])
+
+    payload = _request_sms_code(client, application["client_id"], "13800138000")
+    valid_code = payload["debug_code"]
+    for _ in range(5):
+        wrong = client.post(
+            "/auth/sms/login",
+            json={
+                "client_id": application["client_id"],
+                "redirect_uri": "https://crm.example.com/callback",
+                "phone": "13800138000",
+                "code": "000000",
+            },
+        )
+        assert wrong.status_code == 400
+
+    # The burned code no longer works even with the correct value.
+    burned = client.post(
+        "/auth/sms/login",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "phone": "13800138000",
+            "code": valid_code,
+        },
+    )
+    assert burned.status_code == 400
+
+
+def test_phone_variants_share_one_bucket(
+    client: TestClient, db_session: Session, sms_sender, monkeypatch
+) -> None:
+    """+86 and bare forms normalize to one phone identity and one rate bucket."""
+    from app.api import auth as auth_api
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+    application = create_test_application(db_session, login_methods=["sms_code"])
+
+    import json as _json
+    first = None
+    second = None
+    for phone in ["+8613800138000", "13800138000"]:
+        captcha = client.get("/auth/captcha").json()
+        r = client.post(
+            "/auth/sms/request-code",
+            json={
+                "client_id": application["client_id"],
+                "phone": phone,
+                "captcha_key": captcha["captcha_key"],
+                "captcha_answer": captcha["captcha_answer"],
+            },
+        )
+        if first is None:
+            first = (r.status_code, phone)
+        else:
+            second = r.status_code
+    assert first[0] == 200
+    assert second == 429  # same bucket, per-phone minute limit hit

@@ -83,13 +83,30 @@ class EmailPasswordLoginRequest(BaseModel):
     state: str | None = None
 
 
+def _normalize_phone(value: str) -> str:
+    """Canonicalize to one bucket per handset: strip separators and the +86 prefix."""
+    digits = re.sub(r"[\s()-]", "", value)
+    if digits.startswith("+86"):
+        digits = digits[3:]
+    elif digits.startswith("86") and len(digits) == 13:
+        digits = digits[2:]
+    if not re.fullmatch(r"(\+?[0-9]{5,20})", digits):
+        raise ValueError("Invalid phone number")
+    return digits
+
+
 class SmsCodeRequest(BaseModel):
     """Request an SMS verification code."""
 
     client_id: str
-    phone: str = Field(min_length=5, max_length=32, pattern=r"^\+?[0-9]{5,20}$")
+    phone: str
     captcha_key: str
     captcha_answer: str = Field(min_length=1, max_length=10)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
 
 
 class SmsLoginRequest(BaseModel):
@@ -97,9 +114,14 @@ class SmsLoginRequest(BaseModel):
 
     client_id: str
     redirect_uri: HttpUrl
-    phone: str = Field(min_length=5, max_length=32, pattern=r"^\+?[0-9]{5,20}$")
+    phone: str
     code: str = Field(min_length=4, max_length=12)
     state: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
 
 
 class EmailLoginResponse(BaseModel):

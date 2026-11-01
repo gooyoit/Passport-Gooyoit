@@ -330,15 +330,26 @@ def sms_login(
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
     """Complete SMS code login and return an authorization code."""
-    auth_code = complete_sms_login(
-        db,
-        response,
-        client_id=payload.client_id,
-        phone=payload.phone,
-        code=payload.code,
-        redirect_uri=str(payload.redirect_uri),
-        state=payload.state,
+    redis_client = _check_rate_limit(
+        request, check_login_lockout, log_label="sms_login", email=payload.phone
     )
+    try:
+        auth_code = complete_sms_login(
+            db,
+            response,
+            client_id=payload.client_id,
+            phone=payload.phone,
+            code=payload.code,
+            redirect_uri=str(payload.redirect_uri),
+            state=payload.state,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 400 and redis_client:
+            record_failed_login(redis_client, payload.phone, get_client_ip(request))
+        logger.warning("sms_login_failed", phone=payload.phone, detail=exc.detail)
+        raise
+    if redis_client:
+        clear_failed_login(redis_client, payload.phone, get_client_ip(request))
     return EmailLoginResponse(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",

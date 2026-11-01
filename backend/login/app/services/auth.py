@@ -282,7 +282,14 @@ def complete_sms_login(
         .order_by(PhoneVerificationCode.created_at.desc())
         .with_for_update()
     )
-    if verification is None or not verify_secret(code, verification.code_hash):
+    if verification is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid SMS code")
+    if not verify_secret(code, verification.code_hash):
+        verification.attempt_count += 1
+        if verification.attempt_count >= 5:
+            # Burn the code after repeated wrong guesses.
+            verification.used_at = now
+        db.commit()  # persist the attempt counter before raising
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid SMS code")
     verification.used_at = now
 
