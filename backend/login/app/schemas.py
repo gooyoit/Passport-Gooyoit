@@ -310,6 +310,7 @@ class LoginMethodsResponse(BaseModel):
 
     login_methods: list[str]
     application_name: str
+    allow_registration: bool = False
 
 
 class WebAuthnBeginRequest(BaseModel):

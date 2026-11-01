@@ -68,6 +68,8 @@ def login_methods(
     return LoginMethodsResponse(
         login_methods=[m.method for m in methods],
         application_name=application.name,
+        allow_registration=application.enable_public_users
+        and any(m.method == "email_code" for m in methods),
     )
 
 

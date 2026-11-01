@@ -24,6 +24,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
+  const [allowRegistration, setAllowRegistration] = useState(false);
   const [emailPasswordEnabled, setEmailPasswordEnabled] = useState(false);
   const [appName, setAppName] = useState(oauth.appName);
   const {
@@ -51,6 +52,9 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
       const methods = parsed.success ? parsed.data.login_methods : [];
       if (parsed.success && parsed.data.application_name) {
         setAppName(parsed.data.application_name);
+      }
+      if (parsed.success && parsed.data.allow_registration) {
+        setAllowRegistration(true);
       }
       if (methods.length > 0) {
         setLoginMethods(methods);
@@ -356,10 +360,12 @@ export default function LoginPage({ onSwitch }: { onSwitch: (v: "login" | "regis
           </button>
           )}
 
+          {allowRegistration && (
           <p className="switch-text">
             {t("login.noAccount")}
             <button onClick={() => onSwitch("register")}>{t("login.register")}</button>
           </p>
+          )}
           <p className="switch-text">
             <a href="/account/settings">{t("login.accountSettings")}</a>
           </p>

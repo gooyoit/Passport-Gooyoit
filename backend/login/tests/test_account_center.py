@@ -499,3 +499,32 @@ def test_browser_logout_revokes_sso_and_redirects(
         .revoked_at
     )
     assert revoked is not None
+
+
+def test_registration_hidden_and_rejected_when_public_signup_disabled(
+    client: TestClient, db_session: Session
+) -> None:
+    """Closed apps do not advertise registration and reject register codes."""
+    application = create_test_application(
+        db_session, enable_public_users=False, login_methods=["email_code", "email_password"]
+    )
+
+    methods = client.get(
+        "/oauth/login-methods", params={"client_id": application["client_id"]}
+    )
+    assert methods.status_code == 200
+    assert methods.json()["allow_registration"] is False
+
+    captcha = client.get("/auth/captcha").json()
+    rejected = client.post(
+        "/auth/email/request-code",
+        json={
+            "client_id": application["client_id"],
+            "email": "join@example.com",
+            "purpose": "register",
+            "captcha_key": captcha["captcha_key"],
+            "captcha_answer": captcha["captcha_answer"],
+        },
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == "Registration is disabled"

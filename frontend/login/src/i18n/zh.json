@@ -77,7 +77,9 @@
     "tos": "用户协议",
     "termsJoin": "和",
     "privacy": "隐私政策",
-    "termsSuffix": "。"
+    "termsSuffix": "。",
+    "github": "GitHub",
+    "wechat": "微信"
   },
   "accountSettings": {
     "loading": "加载中…",

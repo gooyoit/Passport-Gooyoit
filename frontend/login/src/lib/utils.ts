@@ -6,6 +6,7 @@ export const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 export const loginMethodsSchema = z.object({
   login_methods: z.array(z.string()),
   application_name: z.string().optional(),
+  allow_registration: z.boolean().default(false),
 });
 
 export const redirectUriSchema = z.object({

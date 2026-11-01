@@ -91,6 +91,11 @@ def issue_email_code(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="client_id is required for this purpose",
         )
+    if application is not None and purpose == "register" and not application.enable_public_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration is disabled",
+        )
     if application is not None and purpose != "bind" and not is_login_method_enabled(db, application.id, "email_code"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -251,6 +256,11 @@ def complete_email_register(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email code login is disabled",
+        )
+    if not application.enable_public_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration is disabled",
         )
 
     normalized_email = email.lower()
