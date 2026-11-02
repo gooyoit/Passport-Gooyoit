@@ -691,6 +691,33 @@ def test_phone_bind_cookie_path_rejects_bad_captcha(
     client.cookies.delete("passport_sso")
 
 
+def test_phone_bind_refuses_merge_into_inactive_owner(
+    client: TestClient, db_session: Session, sms_sender
+) -> None:
+    """An inactive phone-owner account blocks the merge instead of being claimed."""
+    bare = _wechat_skip_user(db_session)
+    owner = _phone_owner(db_session, "13400134000", "inactive_owner")
+    owner.status = "inactive"
+    db_session.commit()
+    headers, _ = _bearer(db_session, bare)
+
+    code = client.post(
+        "/account/phone/request-code",
+        headers=headers,
+        json={"phone": "13400134000", "captcha_verify_param": "t"},
+    ).json()["debug_code"]
+    refused = client.post(
+        "/account/phone/bind",
+        headers=headers,
+        json={"phone": "13400134000", "code": code},
+    )
+    assert refused.status_code == 403
+
+    db_session.expire_all()
+    assert db_session.get(User, bare.id) is not None
+    assert db_session.get(User, owner.id) is not None
+
+
 def test_phone_bind_wrong_code_locks_out(
     client: TestClient, db_session: Session, sms_sender, monkeypatch
 ) -> None:

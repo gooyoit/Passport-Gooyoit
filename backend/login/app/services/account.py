@@ -128,6 +128,8 @@ def bind_phone_to_current_user(db: Session, *, user: User, phone: str, code: str
         user.phone_verified_at = user.phone_verified_at or utcnow()
         return None
     if owner is not None:
+        if owner.status != UserStatus.ACTIVE:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
         return merge_user_into_target(db, source=user, target=owner)
 
     identity = db.scalar(
