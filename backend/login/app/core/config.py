@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     aliyun_captcha_access_key_id: str = ""
     aliyun_captcha_access_key_secret: str = ""
     aliyun_captcha_scene_id: str = ""
-    aliyun_captcha_endpoint: str = "captcha20230305.aliyuncs.com"
+    aliyun_captcha_endpoint: str = "captcha.aliyuncs.com"
     rate_limit_email_per_minute: int = 1
     rate_limit_ip_per_hour: int = 10
     rate_limit_failed_attempts: int = 5
