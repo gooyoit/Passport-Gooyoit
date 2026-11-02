@@ -47,6 +47,7 @@ from app.services.auth import (
 from app.services.aliyun_captcha import verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
+    check_captcha_attempt_limit,
     check_login_lockout,
     check_sms_rate_limit,
     clear_failed_login,
@@ -213,14 +214,25 @@ def request_sms_code(
     db: Session = Depends(get_db),
 ) -> EmailCodeResponse:
     """Request an SMS login code (captcha-gated, throttled)."""
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    try:
+        check_captcha_attempt_limit(redis_client, client_ip)
+    except RateLimitExceeded as e:
+        logger.warning(
+            "captcha_gate_limited", label="sms_code", phone=payload.phone, client_ip=client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=e.detail,
+            headers={"Retry-After": str(e.retry_after)},
+        )
     if not verify_captcha(payload.captcha_verify_param):
         logger.warning("captcha_verification_failed", phone=payload.phone)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Captcha verification failed",
         )
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
     try:
         check_sms_rate_limit(redis_client, payload.phone, client_ip)
     except RateLimitExceeded as e:

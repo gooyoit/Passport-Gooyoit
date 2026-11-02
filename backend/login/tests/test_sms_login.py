@@ -182,6 +182,29 @@ def test_captcha_failure_does_not_burn_sms_quota(
     assert ok.json()["debug_code"]
 
 
+def test_captcha_gate_blocks_verify_spam(
+    client: TestClient, db_session: Session, sms_sender, monkeypatch
+) -> None:
+    """The outbound captcha call itself is per-IP throttled, independent of SMS quota."""
+    from app.api import auth as auth_api
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+    monkeypatch.setattr(auth_api, "verify_captcha", lambda param: False)
+    application = create_test_application(db_session, login_methods=["sms_code"])
+
+    payload = {
+        "client_id": application["client_id"],
+        "phone": "13800138000",
+        "captcha_verify_param": "bad",
+    }
+    for _ in range(30):
+        assert client.post("/auth/sms/request-code", json=payload).status_code == 400
+    limited = client.post("/auth/sms/request-code", json=payload)
+    assert limited.status_code == 429
+    assert limited.headers.get("Retry-After")
+
+
 def test_sms_code_burns_after_repeated_wrong_guesses(
     client: TestClient, db_session: Session, sms_sender
 ) -> None:

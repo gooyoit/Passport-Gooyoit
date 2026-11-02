@@ -15,6 +15,28 @@ def captcha_enabled() -> bool:
     )
 
 
+_client = None
+
+
+def _get_client():
+    """Build the SDK client once; per-call construction re-does DNS + TLS."""
+    global _client
+    if _client is None:
+        from alibabacloud_captcha20230305.client import Client
+        from alibabacloud_tea_openapi.models import Config
+
+        _client = Client(
+            Config(
+                access_key_id=settings.aliyun_captcha_access_key_id,
+                access_key_secret=settings.aliyun_captcha_access_key_secret,
+                endpoint=settings.aliyun_captcha_endpoint,
+                connect_timeout=5000,
+                read_timeout=5000,
+            )
+        )
+    return _client
+
+
 def verify_captcha(captcha_verify_param: str) -> bool:
     """Verify the token produced by the frontend Aliyun Captcha 2.0 widget."""
     if not captcha_enabled():
@@ -22,16 +44,8 @@ def verify_captcha(captcha_verify_param: str) -> bool:
         return False
     # Imported lazily so the SDK is only required when captcha is enabled.
     from alibabacloud_captcha20230305 import models as captcha_models
-    from alibabacloud_captcha20230305.client import Client
-    from alibabacloud_tea_openapi.models import Config
 
-    client = Client(
-        Config(
-            access_key_id=settings.aliyun_captcha_access_key_id,
-            access_key_secret=settings.aliyun_captcha_access_key_secret,
-            endpoint=settings.aliyun_captcha_endpoint,
-        )
-    )
+    client = _get_client()
     try:
         response = client.verify_intelligent_captcha(
             captcha_models.VerifyIntelligentCaptchaRequest(

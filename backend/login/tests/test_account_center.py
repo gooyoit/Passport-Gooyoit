@@ -718,6 +718,33 @@ def test_phone_bind_refuses_merge_into_inactive_owner(
     assert db_session.get(User, owner.id) is not None
 
 
+def test_bind_phone_code_per_account_budget(
+    client: TestClient, db_session: Session, sms_sender, monkeypatch
+) -> None:
+    """One account cannot fan out bind-phone SMS sends across many numbers."""
+    from app.api import account as account_api
+    from app.core.config import settings
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_api, "get_redis_client", lambda: redis)
+    monkeypatch.setattr(settings, "sms_rate_ip_per_hour", 100)
+    monkeypatch.setattr(settings, "sms_rate_account_per_hour", 3)
+
+    user = _wechat_skip_user(db_session)
+    headers, _ = _bearer(db_session, user)
+
+    statuses = [
+        client.post(
+            "/account/phone/request-code",
+            headers=headers,
+            json={"phone": f"1350013{i:04d}", "captcha_verify_param": ""},
+        ).status_code
+        for i in range(4)
+    ]
+    assert statuses[:3] == [200, 200, 200]
+    assert statuses[3] == 429
+
+
 def test_phone_bind_wrong_code_locks_out(
     client: TestClient, db_session: Session, sms_sender, monkeypatch
 ) -> None:

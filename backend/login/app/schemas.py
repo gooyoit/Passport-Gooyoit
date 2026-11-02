@@ -284,10 +284,15 @@ class AccountCredentialsRequest(BaseModel):
 
 
 class AccountPhoneCodeRequest(BaseModel):
-    """Request an SMS code to bind a phone as a login credential."""
+    """Request an SMS code to bind a phone as a login credential.
+
+    captcha_verify_param is optional because Bearer callers skip the captcha;
+    the cookie path still fails closed when it is missing (empty string never
+    verifies).
+    """
 
     phone: str
-    captcha_verify_param: str = Field(min_length=1, max_length=8192)
+    captcha_verify_param: str = Field(default="", max_length=8192)
 
     @field_validator("phone")
     @classmethod

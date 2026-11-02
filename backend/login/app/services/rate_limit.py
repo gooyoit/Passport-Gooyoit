@@ -78,6 +78,43 @@ def check_sms_rate_limit(redis_client: Redis | None, phone: str, ip: str) -> Non
     _window(f"rl:sms:ip:d:{ip}", 86400, settings.sms_rate_ip_per_day)
 
 
+def check_captcha_attempt_limit(redis_client: Redis | None, ip: str) -> None:
+    """Cheap per-IP gate in front of the outbound captcha verify call.
+
+    Bounds Aliyun API spend and latency amplification from garbage tokens;
+    deliberately separate from the SMS quota so failed slider attempts
+    never burn a real send window.
+    """
+    if redis_client is None:
+        return
+    key = f"rl:captcha:h:{ip}"
+    count = redis_client.incr(key)
+    if count == 1:
+        redis_client.expire(key, 3600)
+    if count > settings.captcha_verify_per_ip_per_hour:
+        raise RateLimitExceeded("Too many captcha attempts", redis_client.ttl(key))
+
+
+def check_account_sms_rate_limit(redis_client: Redis | None, user_id: int) -> None:
+    """Per-account SMS budget for authenticated bind-phone requests.
+
+    Works alongside the per-phone/IP windows so a single token cannot
+    fan out SMS sends across many numbers.
+    """
+    if redis_client is None:
+        return
+
+    def _window(key: str, seconds: int, limit: int) -> None:
+        count = redis_client.incr(key)
+        if count == 1:
+            redis_client.expire(key, seconds)
+        if count > limit:
+            raise RateLimitExceeded("SMS rate limit exceeded", redis_client.ttl(key))
+
+    _window(f"rl:sms:acct:h:{user_id}", 3600, settings.sms_rate_account_per_hour)
+    _window(f"rl:sms:acct:d:{user_id}", 86400, settings.sms_rate_account_per_day)
+
+
 def check_registration_rate_limit(redis_client: Redis | None, ip: str) -> None:
     if redis_client is None:
         return

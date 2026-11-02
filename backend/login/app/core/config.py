@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     sms_rate_phone_per_day: int = 10
     sms_rate_ip_per_hour: int = 10
     sms_rate_ip_per_day: int = 30
+    sms_rate_account_per_hour: int = 10
+    sms_rate_account_per_day: int = 20
+    captcha_verify_per_ip_per_hour: int = 30
     sms_provider: str = ""  # "aliyun" when configured; empty disables SMS
     aliyun_sms_access_key_id: str = ""
     aliyun_sms_access_key_secret: str = ""

@@ -36,6 +36,8 @@ from app.services.auth import SSO_COOKIE_NAME, issue_sms_code, set_sso_cookie
 from app.services.oauth_providers import build_oauth_client, fetch_provider_profile
 from app.services.rate_limit import (
     RateLimitExceeded,
+    check_account_sms_rate_limit,
+    check_captcha_attempt_limit,
     check_login_lockout,
     check_sms_rate_limit,
     clear_failed_login,
@@ -142,15 +144,25 @@ def request_phone_bind_code(
     the anonymous-facing account center page must pass the captcha.
     """
     user, application_id = account
-    if application_id is None and not verify_captcha(payload.captcha_verify_param):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Captcha verification failed",
-        )
+    redis_client = get_redis_client()
+    client_ip = get_client_ip(request)
+    if application_id is None:
+        try:
+            check_captcha_attempt_limit(redis_client, client_ip)
+        except RateLimitExceeded as e:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=e.detail,
+                headers={"Retry-After": str(e.retry_after)},
+            )
+        if not verify_captcha(payload.captcha_verify_param):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Captcha verification failed",
+            )
     try:
-        check_sms_rate_limit(
-            get_redis_client(), payload.phone, get_client_ip(request)
-        )
+        check_sms_rate_limit(redis_client, payload.phone, client_ip)
+        check_account_sms_rate_limit(redis_client, user.id)
     except RateLimitExceeded as e:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
