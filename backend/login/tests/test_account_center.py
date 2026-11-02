@@ -10,7 +10,7 @@ from app.core.security import create_access_token, hash_password
 from app.models import ApplicationUser, User, UserIdentity
 from app.services.sso import create_sso_session
 
-from conftest import FakeRedis, create_test_application, request_email_code
+from conftest import FakeRedis, create_test_application, request_sms_code
 
 
 def _wechat_skip_user(db_session: Session) -> User:
@@ -290,19 +290,19 @@ def test_credentials_overwrite_password_needs_current_password(
 
 
 def test_userinfo_exposes_binding_state(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, sms_sender
 ) -> None:
     """userinfo now tells business apps whether the user needs completion."""
-    application = create_test_application(db_session, login_methods=["email_code", "email_password"])
-    debug_code = request_email_code(
-        client, application["client_id"], "state@example.com"
+    application = create_test_application(db_session, login_methods=["sms_code", "email_password"])
+    debug_code = request_sms_code(
+        client, application["client_id"], "13800138000"
     )["debug_code"]
     auth_code = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://crm.example.com/callback",
-            "email": "state@example.com",
+            "phone": "13800138000",
             "code": debug_code,
         },
     ).json()["code"]
@@ -323,9 +323,7 @@ def test_userinfo_exposes_binding_state(
     assert response.status_code == 200
     payload = response.json()
     assert payload["has_password"] is False
-    assert payload["identities"] == [
-        {"provider": "email", "provider_email": "state@example.com"}
-    ]
+    assert payload["identities"] == [{"provider": "phone", "provider_email": None}]
 
 
 def _local_account(db_session: Session) -> User:
@@ -531,7 +529,7 @@ def test_registration_hidden_and_rejected_when_public_signup_disabled(
 ) -> None:
     """Closed apps do not advertise registration and reject register codes."""
     application = create_test_application(
-        db_session, enable_public_users=False, login_methods=["email_code", "email_password"]
+        db_session, enable_public_users=False, login_methods=["sms_code", "email_password"]
     )
 
     methods = client.get(
@@ -542,10 +540,10 @@ def test_registration_hidden_and_rejected_when_public_signup_disabled(
 
     captcha = client.get("/auth/captcha").json()
     rejected = client.post(
-        "/auth/email/request-code",
+        "/auth/sms/request-code",
         json={
             "client_id": application["client_id"],
-            "email": "join@example.com",
+            "phone": "13800138000",
             "purpose": "register",
             "captcha_key": captcha["captcha_key"],
             "captcha_answer": captcha["captcha_answer"],

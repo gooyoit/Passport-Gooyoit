@@ -20,16 +20,6 @@ def _password_complexity(password: str) -> str:
     return password
 
 
-class EmailCodeRequest(BaseModel):
-    """Request an email verification code."""
-
-    client_id: str
-    email: EmailStr
-    captcha_key: str
-    captcha_answer: str = Field(min_length=1, max_length=10)
-    purpose: str = Field(default="login", pattern="^(login|register|bind)$")
-
-
 class EmailCodeResponse(BaseModel):
     """Email verification code response."""
 
@@ -43,34 +33,6 @@ class CaptchaResponse(BaseModel):
     captcha_key: str
     captcha_image: str
     captcha_answer: str | None = None
-
-
-class EmailLoginRequest(BaseModel):
-    """Complete email code login."""
-
-    client_id: str
-    redirect_uri: HttpUrl
-    email: EmailStr
-    code: str = Field(min_length=4, max_length=12)
-    state: str | None = None
-
-
-class EmailRegisterRequest(BaseModel):
-    """Register a new user with email code."""
-
-    client_id: str
-    redirect_uri: HttpUrl
-    state: str | None = None
-    first_name: str = Field(min_length=1, max_length=64)
-    last_name: str = Field(min_length=1, max_length=64)
-    email: EmailStr
-    code: str = Field(min_length=4, max_length=12)
-    password: str = Field(min_length=8, max_length=128)
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        return _password_complexity(v)
 
 
 class EmailPasswordLoginRequest(BaseModel):
@@ -102,6 +64,7 @@ class SmsCodeRequest(BaseModel):
     phone: str
     captcha_key: str
     captcha_answer: str = Field(min_length=1, max_length=10)
+    purpose: str = Field(default="login", pattern="^(login|register|reset_password)$")
 
     @field_validator("phone")
     @classmethod
@@ -122,6 +85,42 @@ class SmsLoginRequest(BaseModel):
     @classmethod
     def validate_phone(cls, value: str) -> str:
         return _normalize_phone(value)
+
+
+class SmsRegisterRequest(BaseModel):
+    """Register a new user with an SMS code (no password; set it later)."""
+
+    client_id: str
+    redirect_uri: HttpUrl
+    phone: str
+    code: str = Field(min_length=4, max_length=12)
+    state: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
+
+
+class SmsResetPasswordRequest(BaseModel):
+    """Reset a forgotten password with an SMS code."""
+
+    client_id: str
+    redirect_uri: HttpUrl
+    phone: str
+    code: str = Field(min_length=4, max_length=12)
+    new_password: str = Field(min_length=8, max_length=128)
+    state: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _password_complexity(v)
 
 
 class EmailLoginResponse(BaseModel):

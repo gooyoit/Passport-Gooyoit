@@ -5,7 +5,7 @@ from datetime import timedelta
 import structlog
 
 from fastapi import HTTPException, Response, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -28,6 +28,7 @@ from app.models import (
     OAuthAuthorizationCode,
     OAuthToken,
     PhoneVerificationCode,
+    SsoSession,
     User,
     UserIdentity,
 )
@@ -123,62 +124,6 @@ def issue_email_code(
     return code
 
 
-def complete_email_login(
-    db: Session,
-    response: Response,
-    *,
-    client_id: str,
-    email: str,
-    code: str,
-    redirect_uri: str,
-    state: str | None,
-) -> OAuthAuthorizationCode:
-    """Verify an email code and create an authorization code."""
-    application = get_active_application_by_client_id(db, client_id)
-    if application is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if not validate_redirect_uri(application, redirect_uri):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
-    if not is_login_method_enabled(db, application.id, "email_code"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email code login is disabled",
-        )
-
-    now = utcnow()
-    verification = db.scalar(
-        select(EmailVerificationCode)
-        .where(
-            EmailVerificationCode.email == email.lower(),
-            EmailVerificationCode.purpose == "login",
-            EmailVerificationCode.used_at.is_(None),
-            EmailVerificationCode.expires_at > now,
-        )
-        .order_by(EmailVerificationCode.created_at.desc())
-        .with_for_update()
-    )
-    if verification is None or not verify_secret(code, verification.code_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
-    verification.used_at = now
-
-    user = get_or_create_email_user(db, email=email)
-    logger.info("email_login_success", email=email, user_id=user.id)
-    membership = ensure_application_user(db, application=application, user=user)
-    membership.last_login_at = now
-
-    _set_sso_cookie_if_enabled(db, response, application, user.id)
-
-    auth_code = create_authorization_code(
-        db,
-        application=application,
-        user=user,
-        redirect_uri=redirect_uri,
-    )
-    db.commit()
-    db.refresh(auth_code)
-    return auth_code
-
-
 def issue_sms_code(db: Session, *, client_id: str, phone: str, purpose: str = "login") -> str:
     """Create an SMS verification code and send it."""
     application = get_active_application_by_client_id(db, client_id)
@@ -189,9 +134,24 @@ def issue_sms_code(db: Session, *, client_id: str, phone: str, purpose: str = "l
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="SMS code login is disabled",
         )
+    if purpose == "register" and not application.enable_public_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration is disabled",
+        )
+    if purpose == "register" and db.scalar(select(User).where(User.phone == phone)) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Phone number is already registered",
+        )
+    if purpose == "reset_password" and db.scalar(select(User).where(User.phone == phone)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is not registered",
+        )
 
     code = random_digits()
-    if not send_sms_code(phone, code):
+    if not send_sms_code(phone, code, purpose=purpose):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to send SMS",
@@ -248,34 +208,14 @@ def get_or_create_phone_user(db: Session, *, phone: str, application: Applicatio
     return user
 
 
-def complete_sms_login(
-    db: Session,
-    response: Response,
-    *,
-    client_id: str,
-    phone: str,
-    code: str,
-    redirect_uri: str,
-    state: str | None,
-) -> OAuthAuthorizationCode:
-    """Verify an SMS code and log the user in (auto-registering when allowed)."""
-    application = get_active_application_by_client_id(db, client_id)
-    if application is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if not validate_redirect_uri(application, redirect_uri):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
-    if not is_login_method_enabled(db, application.id, "sms_code"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SMS code login is disabled",
-        )
-
+def _consume_sms_code(db: Session, *, phone: str, code: str, purpose: str) -> None:
+    """Mark the newest valid code for this phone+purpose as used; burn after 5 wrong tries."""
     now = utcnow()
     verification = db.scalar(
         select(PhoneVerificationCode)
         .where(
             PhoneVerificationCode.phone == phone,
-            PhoneVerificationCode.purpose == "login",
+            PhoneVerificationCode.purpose == purpose,
             PhoneVerificationCode.used_at.is_(None),
             PhoneVerificationCode.expires_at > now,
         )
@@ -293,15 +233,20 @@ def complete_sms_login(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid SMS code")
     verification.used_at = now
 
-    user = get_or_create_phone_user(db, phone=phone, application=application)
-    if user.status != UserStatus.ACTIVE:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
-    logger.info("sms_login_success", phone=phone, user_id=user.id)
+
+def _issue_login_grant(
+    db: Session,
+    response: Response,
+    *,
+    application: Application,
+    user: User,
+    redirect_uri: str,
+) -> OAuthAuthorizationCode:
+    """Shared tail of SMS flows: membership, SSO cookie, authorization code."""
+    now = utcnow()
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
-
     _set_sso_cookie_if_enabled(db, response, application, user.id)
-
     auth_code = create_authorization_code(
         db,
         application=application,
@@ -311,6 +256,111 @@ def complete_sms_login(
     db.commit()
     db.refresh(auth_code)
     return auth_code
+
+
+def _sms_application_or_error(db: Session, client_id: str, redirect_uri: str) -> Application:
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not validate_redirect_uri(application, redirect_uri):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
+    if not is_login_method_enabled(db, application.id, "sms_code"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMS code login is disabled",
+        )
+    return application
+
+
+def complete_sms_login(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    phone: str,
+    code: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify an SMS code and log the user in (auto-registering when allowed)."""
+    application = _sms_application_or_error(db, client_id, redirect_uri)
+    _consume_sms_code(db, phone=phone, code=code, purpose="login")
+
+    user = get_or_create_phone_user(db, phone=phone, application=application)
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
+    logger.info("sms_login_success", phone=phone, user_id=user.id)
+    return _issue_login_grant(db, response, application=application, user=user, redirect_uri=redirect_uri)
+
+
+def complete_sms_register(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    phone: str,
+    code: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify a register-purpose SMS code, create the account, and log the user in."""
+    application = _sms_application_or_error(db, client_id, redirect_uri)
+    if not application.enable_public_users:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled",
+        )
+    _consume_sms_code(db, phone=phone, code=code, purpose="register")
+
+    user = get_or_create_phone_user(db, phone=phone, application=application)
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
+    logger.info("sms_register_success", phone=phone, user_id=user.id)
+    return _issue_login_grant(db, response, application=application, user=user, redirect_uri=redirect_uri)
+
+
+def _revoke_user_sessions(db: Session, user_id: int) -> None:
+    """Revoke all refresh tokens and SSO sessions (password-reset hygiene)."""
+    now = utcnow()
+    db.execute(
+        update(OAuthToken)
+        .where(OAuthToken.user_id == user_id, OAuthToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    db.execute(
+        update(SsoSession)
+        .where(SsoSession.user_id == user_id, SsoSession.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+
+
+def complete_sms_password_reset(
+    db: Session,
+    response: Response,
+    *,
+    client_id: str,
+    phone: str,
+    code: str,
+    new_password: str,
+    redirect_uri: str,
+    state: str | None,
+) -> OAuthAuthorizationCode:
+    """Verify a reset-purpose SMS code, set the new password, and log the user in."""
+    application = _sms_application_or_error(db, client_id, redirect_uri)
+    _consume_sms_code(db, phone=phone, code=code, purpose="reset_password")
+
+    user = db.scalar(select(User).where(User.phone == phone))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is not registered",
+        )
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
+    user.hashed_password = hash_password(new_password)
+    _revoke_user_sessions(db, user.id)
+    logger.info("sms_password_reset_success", phone=phone, user_id=user.id)
+    return _issue_login_grant(db, response, application=application, user=user, redirect_uri=redirect_uri)
 
 
 def complete_password_login(
@@ -354,103 +404,6 @@ def complete_password_login(
 
     logger.info("password_login_success", identifier=normalized_identifier, user_id=user.id)
     now = utcnow()
-    membership = ensure_application_user(db, application=application, user=user)
-    membership.last_login_at = now
-
-    _set_sso_cookie_if_enabled(db, response, application, user.id)
-
-    auth_code = create_authorization_code(
-        db,
-        application=application,
-        user=user,
-        redirect_uri=redirect_uri,
-    )
-    db.commit()
-    db.refresh(auth_code)
-    return auth_code
-
-
-def complete_email_register(
-    db: Session,
-    response: Response,
-    *,
-    client_id: str,
-    first_name: str,
-    last_name: str,
-    email: str,
-    code: str,
-    password: str,
-    redirect_uri: str,
-    state: str | None,
-) -> OAuthAuthorizationCode:
-    """Verify email code, create user with password, and issue authorization code."""
-    application = get_active_application_by_client_id(db, client_id)
-    if application is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if not validate_redirect_uri(application, redirect_uri):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
-    if not is_login_method_enabled(db, application.id, "email_code"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email code login is disabled",
-        )
-    if not application.enable_public_users:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration is disabled",
-        )
-
-    normalized_email = email.lower()
-    existing = db.scalar(select(User).where(User.email == normalized_email))
-    if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
-
-    existing_identity = db.scalar(
-        select(UserIdentity).where(
-            UserIdentity.provider == "email",
-            UserIdentity.provider_user_id == normalized_email,
-        )
-    )
-    if existing_identity is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
-
-    now = utcnow()
-    verification = db.scalar(
-        select(EmailVerificationCode)
-        .where(
-            EmailVerificationCode.email == normalized_email,
-            EmailVerificationCode.purpose == "register",
-            EmailVerificationCode.used_at.is_(None),
-            EmailVerificationCode.expires_at > now,
-        )
-        .order_by(EmailVerificationCode.created_at.desc())
-        .with_for_update()
-    )
-    if verification is None or not verify_secret(code, verification.code_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
-    verification.used_at = now
-
-    user = User(
-        email=normalized_email,
-        email_verified_at=now,
-        display_name=f"{first_name} {last_name}",
-        hashed_password=hash_password(password),
-    )
-    db.add(user)
-    db.flush()
-    logger.info("user_registered", email=normalized_email)
-
-    db.add(
-        UserIdentity(
-            user_id=user.id,
-            provider="email",
-            provider_user_id=normalized_email,
-            provider_email=normalized_email,
-            raw_profile={},
-        )
-    )
-    db.flush()
-
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 

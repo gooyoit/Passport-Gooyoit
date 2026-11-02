@@ -5,35 +5,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app import models
-from app.services import auth as auth_service
 
-from conftest import FakeRedis, create_test_application
-
-
-def _request_sms_code(
-    client: TestClient, client_id: str, phone: str, monkeypatch=None
-) -> dict:
-    """Request an SMS code through the real captcha flow."""
-    captcha = client.get("/auth/captcha").json()
-    response = client.post(
-        "/auth/sms/request-code",
-        json={
-            "client_id": client_id,
-            "phone": phone,
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
-        },
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-@pytest.fixture()
-def sms_sender(monkeypatch: pytest.MonkeyPatch):
-    """Stub SMS delivery and return the sent codes."""
-    sent: list[str] = []
-    monkeypatch.setattr(auth_service, "send_sms_code", lambda phone, code: sent.append(code) or True)
-    return sent
+from conftest import FakeRedis, create_test_application, request_sms_code, sms_sender  # noqa: F401
 
 
 def test_sms_login_auto_registers_user(
@@ -44,7 +17,7 @@ def test_sms_login_auto_registers_user(
         db_session, login_methods=["sms_code", "email_password"]
     )
 
-    payload = _request_sms_code(client, application["client_id"], "13800138000")
+    payload = request_sms_code(client, application["client_id"], "13800138000")
     assert payload["debug_code"]
 
     login = client.post(
@@ -82,7 +55,7 @@ def test_sms_login_closed_app_rejects_new_phone(
         db_session, enable_public_users=False, login_methods=["sms_code"]
     )
 
-    payload = _request_sms_code(client, application["client_id"], "13900139000")
+    payload = request_sms_code(client, application["client_id"], "13900139000")
     login = client.post(
         "/auth/sms/login",
         json={
@@ -102,7 +75,7 @@ def test_sms_login_wrong_code_rejected_then_retry(
     """A wrong code does not consume the valid one."""
     application = create_test_application(db_session, login_methods=["sms_code"])
 
-    payload = _request_sms_code(client, application["client_id"], "13800138000")
+    payload = request_sms_code(client, application["client_id"], "13800138000")
     wrong = client.post(
         "/auth/sms/login",
         json={
@@ -190,7 +163,7 @@ def test_sms_code_burns_after_repeated_wrong_guesses(
     """Five wrong code guesses invalidate the code even if leaked later."""
     application = create_test_application(db_session, login_methods=["sms_code"])
 
-    payload = _request_sms_code(client, application["client_id"], "13800138000")
+    payload = request_sms_code(client, application["client_id"], "13800138000")
     valid_code = payload["debug_code"]
     for _ in range(5):
         wrong = client.post(

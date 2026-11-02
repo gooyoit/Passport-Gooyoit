@@ -6,26 +6,27 @@ from sqlalchemy.orm import Session
 
 from app.models import UserRole
 
-from conftest import create_test_application, request_email_code
+from conftest import create_test_application, request_sms_code, sms_sender  # noqa: F401
 
 
-def test_email_login_code_exchange_and_userinfo(
+def test_sms_login_code_exchange_and_userinfo(
     client: TestClient,
     db_session: Session,
+    sms_sender,
 ) -> None:
-    """Email login issues one-time code, tokens, and default role."""
+    """SMS login issues one-time code, tokens, and default role."""
     application = create_test_application(db_session)
 
-    debug_code = request_email_code(
-        client, application["client_id"], "User@Example.com"
-    )["debug_code"]
+    debug_code = request_sms_code(client, application["client_id"], "13800138000")[
+        "debug_code"
+    ]
 
     login_response = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://crm.example.com/callback",
-            "email": "user@example.com",
+            "phone": "13800138000",
             "code": debug_code,
             "state": "state-1",
         },
@@ -44,7 +45,6 @@ def test_email_login_code_exchange_and_userinfo(
     )
     assert token_response.status_code == 200
     token_payload = token_response.json()
-    assert token_payload["user"]["email"] == "user@example.com"
     assert token_payload["roles"] == ["member"]
     assert token_payload["permissions"] == []
 
@@ -73,18 +73,19 @@ def test_email_login_code_exchange_and_userinfo(
 def test_refresh_token_and_logout(
     client: TestClient,
     db_session: Session,
+    sms_sender,
 ) -> None:
     """Refresh token can renew access and logout revokes refresh token."""
     application = create_test_application(db_session)
-    debug_code = request_email_code(
-        client, application["client_id"], "user@example.com"
-    )["debug_code"]
+    debug_code = request_sms_code(client, application["client_id"], "13800138000")[
+        "debug_code"
+    ]
     authorization_code = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://crm.example.com/callback",
-            "email": "user@example.com",
+            "phone": "13800138000",
             "code": debug_code,
         },
     ).json()["code"]
@@ -107,7 +108,7 @@ def test_refresh_token_and_logout(
         },
     )
     assert refresh_response.status_code == 200
-    assert refresh_response.json()["user"]["email"] == "user@example.com"
+    assert refresh_response.json()["user"]["id"] == token_payload["user"]["id"]
 
     logout_response = client.post(
         "/oauth/logout",
@@ -130,19 +131,20 @@ def test_refresh_token_and_logout(
 def test_invalid_redirect_uri_is_rejected(
     client: TestClient,
     db_session: Session,
+    sms_sender,
 ) -> None:
     """Login rejects callback URLs that are not whitelisted."""
     application = create_test_application(db_session)
-    debug_code = request_email_code(
-        client, application["client_id"], "user@example.com"
-    )["debug_code"]
+    debug_code = request_sms_code(client, application["client_id"], "13800138000")[
+        "debug_code"
+    ]
 
     login_response = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://evil.example.com/callback",
-            "email": "user@example.com",
+            "phone": "13800138000",
             "code": debug_code,
         },
     )

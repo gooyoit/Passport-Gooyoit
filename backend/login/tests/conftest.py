@@ -106,7 +106,7 @@ def create_test_application(
     db.add(default_role)
     db.flush()
     application.default_role_id = default_role.id
-    for method in login_methods or ["email_code"]:
+    for method in login_methods or ["sms_code"]:
         db.add(
             models.ApplicationLoginMethod(
                 application_id=application.id,
@@ -137,6 +137,20 @@ def _local_only_redis(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
+def sms_sender(monkeypatch: pytest.MonkeyPatch):
+    """Stub SMS delivery and return the sent codes."""
+    from app.services import auth as auth_service
+
+    sent: list[str] = []
+    monkeypatch.setattr(
+        auth_service,
+        "send_sms_code",
+        lambda phone, code, purpose="login": sent.append(code) or True,
+    )
+    return sent
+
+
+@pytest.fixture()
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """Create a FastAPI test client with DB override."""
     settings.debug = True
@@ -151,19 +165,19 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def request_email_code(
-    client: TestClient, client_id: str, email: str, purpose: str = "login"
+def request_sms_code(
+    client: TestClient, client_id: str, phone: str, purpose: str = "login"
 ) -> dict:
-    """Request an email code through the real captcha flow (debug exposes it)."""
+    """Request an SMS code through the real captcha flow (debug exposes it)."""
     captcha = client.get("/auth/captcha").json()
     response = client.post(
-        "/auth/email/request-code",
+        "/auth/sms/request-code",
         json={
             "client_id": client_id,
-            "email": email,
+            "phone": phone,
+            "purpose": purpose,
             "captcha_key": captcha["captcha_key"],
             "captcha_answer": captcha["captcha_answer"],
-            "purpose": purpose,
         },
     )
     assert response.status_code == 200, response.text

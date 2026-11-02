@@ -17,14 +17,13 @@ from app.schemas import (
     AccountSetupRequest,
     AccountSetupResponse,
     CaptchaResponse,
-    EmailCodeRequest,
     EmailCodeResponse,
-    EmailLoginRequest,
     EmailLoginResponse,
     EmailPasswordLoginRequest,
-    EmailRegisterRequest,
     SmsCodeRequest,
     SmsLoginRequest,
+    SmsRegisterRequest,
+    SmsResetPasswordRequest,
     WebAuthnBeginRequest,
     WebAuthnBeginResponse,
     WebAuthnVerifyRequest,
@@ -40,19 +39,16 @@ from app.services.applications import (
 from app.services.auth import (
     SSO_COOKIE_NAME,
     clear_sso_cookie,
-    complete_email_login,
-    complete_email_register,
     complete_password_login,
     complete_sms_login,
-    issue_email_code,
+    complete_sms_register,
+    complete_sms_password_reset,
     issue_sms_code,
 )
 from app.services.captcha import generate_captcha, verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_login_lockout,
-    check_registration_rate_limit,
-    check_request_code_rate_limit,
     check_sms_rate_limit,
     clear_failed_login,
     get_client_ip,
@@ -164,86 +160,12 @@ def _check_rate_limit(request: Request, check_fn, *, log_label: str, email: str 
     return redis_client
 
 
-def _check_registration_ip_rate_limit(request: Request) -> None:
-    redis_client = get_redis_client()
-    client_ip = get_client_ip(request)
-    try:
-        check_registration_rate_limit(redis_client, client_ip)
-    except RateLimitExceeded as e:
-        logger.warning("rate_limited", label="register_ip", client_ip=client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
-
-
 @router.get("/captcha", response_model=CaptchaResponse)
 def get_captcha() -> CaptchaResponse:
     """Generate a captcha image."""
     redis_client = get_redis_client()
     data = generate_captcha(redis_client)
     return CaptchaResponse(**data)
-
-
-@router.post("/email/request-code", response_model=EmailCodeResponse)
-def request_email_code(
-    payload: EmailCodeRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> EmailCodeResponse:
-    """Request an email login code."""
-    redis_client = _check_rate_limit(
-        request, check_request_code_rate_limit, log_label="request_code", email=str(payload.email)
-    )
-
-    if not verify_captcha(redis_client, payload.captcha_key, payload.captcha_answer):
-        logger.warning("captcha_verification_failed", email=payload.email)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired captcha",
-        )
-
-    code = issue_email_code(db, client_id=payload.client_id, email=str(payload.email), purpose=payload.purpose)
-    return EmailCodeResponse(sent=True, debug_code=code if settings.debug else None)
-
-
-@router.post("/email/login", response_model=EmailLoginResponse)
-def email_login(
-    payload: EmailLoginRequest,
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db),
-) -> EmailLoginResponse:
-    """Complete email login and return an authorization code."""
-    redis_client = _check_rate_limit(
-        request, check_login_lockout, log_label="email_login", email=str(payload.email)
-    )
-
-    try:
-        auth_code = complete_email_login(
-            db,
-            response,
-            client_id=payload.client_id,
-            email=str(payload.email),
-            code=payload.code,
-            redirect_uri=str(payload.redirect_uri),
-            state=payload.state,
-        )
-    except HTTPException as exc:
-        if exc.status_code == 400 and redis_client:
-            record_failed_login(redis_client, str(payload.email), get_client_ip(request))
-        logger.warning("email_login_failed", email=payload.email, detail=exc.detail)
-        raise
-
-    if redis_client:
-        clear_failed_login(redis_client, str(payload.email), get_client_ip(request))
-
-    return EmailLoginResponse(
-        code=auth_code.code,
-        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
-        state=payload.state,
-    )
 
 
 @router.post("/email/login-password", response_model=EmailLoginResponse)
@@ -318,7 +240,12 @@ def request_sms_code(
             detail="Invalid or expired captcha",
         )
 
-    code = issue_sms_code(db, client_id=payload.client_id, phone=payload.phone)
+    code = issue_sms_code(
+        db,
+        client_id=payload.client_id,
+        phone=payload.phone,
+        purpose=payload.purpose,
+    )
     return EmailCodeResponse(sent=True, debug_code=code if settings.debug else None)
 
 
@@ -357,37 +284,70 @@ def sms_login(
     )
 
 
-@router.post("/email/register", response_model=EmailLoginResponse)
-def email_register(
-    payload: EmailRegisterRequest,
+@router.post("/sms/register", response_model=EmailLoginResponse)
+def sms_register(
+    payload: SmsRegisterRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
-    """Register a new user and return an authorization code."""
-    _check_rate_limit(
-        request, check_request_code_rate_limit, log_label="register", email=str(payload.email)
+    """Register a new account with an SMS code and return an authorization code."""
+    redis_client = _check_rate_limit(
+        request, check_login_lockout, log_label="sms_register", email=payload.phone
     )
-    _check_registration_ip_rate_limit(request)
-
     try:
-        auth_code = complete_email_register(
+        auth_code = complete_sms_register(
             db,
             response,
             client_id=payload.client_id,
-            first_name=payload.first_name,
-            last_name=payload.last_name,
-            email=str(payload.email),
+            phone=payload.phone,
             code=payload.code,
-            password=payload.password,
             redirect_uri=str(payload.redirect_uri),
             state=payload.state,
         )
     except HTTPException as exc:
-        logger.warning("register_failed", email=payload.email, detail=exc.detail)
+        if exc.status_code == 400 and redis_client:
+            record_failed_login(redis_client, payload.phone, get_client_ip(request))
+        logger.warning("sms_register_failed", phone=payload.phone, detail=exc.detail)
         raise
+    if redis_client:
+        clear_failed_login(redis_client, payload.phone, get_client_ip(request))
+    return EmailLoginResponse(
+        code=auth_code.code,
+        redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",
+        state=payload.state,
+    )
 
-    logger.info("register_success", email=payload.email, client_id=payload.client_id)
+
+@router.post("/sms/reset-password", response_model=EmailLoginResponse)
+def sms_reset_password(
+    payload: SmsResetPasswordRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> EmailLoginResponse:
+    """Reset a forgotten password with an SMS code; revokes old sessions and logs in."""
+    redis_client = _check_rate_limit(
+        request, check_login_lockout, log_label="sms_reset", email=payload.phone
+    )
+    try:
+        auth_code = complete_sms_password_reset(
+            db,
+            response,
+            client_id=payload.client_id,
+            phone=payload.phone,
+            code=payload.code,
+            new_password=payload.new_password,
+            redirect_uri=str(payload.redirect_uri),
+            state=payload.state,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 400 and redis_client:
+            record_failed_login(redis_client, payload.phone, get_client_ip(request))
+        logger.warning("sms_reset_failed", phone=payload.phone, detail=exc.detail)
+        raise
+    if redis_client:
+        clear_failed_login(redis_client, payload.phone, get_client_ip(request))
     return EmailLoginResponse(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",

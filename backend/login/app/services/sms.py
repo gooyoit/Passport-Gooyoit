@@ -7,20 +7,33 @@ from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
+SMS_PURPOSES = ("login", "register", "reset_password")
+
+
+def _template_for(purpose: str) -> str:
+    if purpose == "register":
+        return settings.aliyun_sms_template_register
+    if purpose == "reset_password":
+        return settings.aliyun_sms_template_reset_password
+    return settings.aliyun_sms_template_login
+
 
 def sms_enabled() -> bool:
     return settings.sms_provider == "aliyun" and bool(
         settings.aliyun_sms_access_key_id
         and settings.aliyun_sms_access_key_secret
         and settings.aliyun_sms_sign_name
-        and settings.aliyun_sms_template_code
     )
 
 
-def send_sms_code(phone: str, code: str) -> bool:
+def send_sms_code(phone: str, code: str, purpose: str = "login") -> bool:
     """Send a verification code; returns False when SMS is not configured."""
     if not sms_enabled():
         logger.warning("sms_not_configured", phone=phone)
+        return False
+    template_code = _template_for(purpose)
+    if not template_code:
+        logger.error("sms_template_missing", phone=phone, purpose=purpose)
         return False
     # Imported lazily so the SDK is only required when SMS is enabled.
     from alibabacloud_dysmsapi20170525.client import Client
@@ -39,7 +52,7 @@ def send_sms_code(phone: str, code: str) -> bool:
             SendSmsRequest(
                 phone_numbers=phone,
                 sign_name=settings.aliyun_sms_sign_name,
-                template_code=settings.aliyun_sms_template_code,
+                template_code=template_code,
                 template_param=json.dumps({"code": code}),
             )
         )

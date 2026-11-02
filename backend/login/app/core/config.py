@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     aliyun_sms_access_key_id: str = ""
     aliyun_sms_access_key_secret: str = ""
     aliyun_sms_sign_name: str = ""
-    aliyun_sms_template_code: str = ""
+    aliyun_sms_template_login: str = ""
+    aliyun_sms_template_register: str = ""
+    aliyun_sms_template_reset_password: str = ""
     aliyun_sms_endpoint: str = "dysmsapi.aliyuncs.com"
     resend_api_key: str = ""
     captcha_ttl_seconds: int = 300

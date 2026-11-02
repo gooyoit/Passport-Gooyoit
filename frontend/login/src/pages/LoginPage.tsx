@@ -4,17 +4,24 @@ import { GithubIcon as GithubIcon, ShieldCheck, Eye, EyeOff, KeyRound } from "lu
 import { FaWeixin } from "react-icons/fa";
 import Showcase from "../components/Showcase";
 import GoogleIcon from "../components/GoogleIcon";
+import OtpInput from "../components/OtpInput";
 import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode } from "../lib/utils";
 import { useCaptcha } from "../hooks/useCaptcha";
 
 type FormEvent = React.FormEvent;
+type SmsPurpose = "login" | "register" | "reset_password";
+type View = "login" | "register" | "forgot";
+type Tab = "sms" | "password";
 
 export default function LoginPage() {
   const { t } = useTranslation();
   const oauth = useOAuthParams();
-  const [mode, setMode] = useState<"sms" | "password">("sms");
+  const [view, setView] = useState<View>("login");
+  const [mode, setMode] = useState<Tab>("sms");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPwd, setShowNewPwd] = useState(false);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -24,6 +31,7 @@ export default function LoginPage() {
   const [codeMsg, setCodeMsg] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
+  const [codePurpose, setCodePurpose] = useState<SmsPurpose>("login");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [passwordEnabled, setPasswordEnabled] = useState(true);
@@ -41,8 +49,11 @@ export default function LoginPage() {
   } = useCaptcha();
 
   useEffect(() => {
-    document.title = t("login.title", { appName });
-  }, [t, appName]);
+    document.title = t(
+      view === "register" ? "login.registerTitle" : view === "forgot" ? "login.forgotTitle" : "login.title",
+      { appName },
+    );
+  }, [t, appName, view]);
 
   useEffect(() => {
     if (!oauth.clientId || !oauth.redirectUri) return;
@@ -60,9 +71,11 @@ export default function LoginPage() {
       if (methods.length > 0) {
         setLoginMethods(methods);
         setPasswordEnabled(methods.includes("email_password"));
-        if (!methods.includes("sms_code")) {
-          setMode("password");
-        }
+        const tabs: Tab[] = [
+          methods.includes("sms_code") ? "sms" : null,
+          methods.includes("email_password") ? "password" : null,
+        ].filter(Boolean) as Tab[];
+        if (tabs.length > 0 && !tabs.includes("sms")) setMode(tabs[0]);
       }
     }).catch(() => {
       setLoginMethods(["sms_code"]);
@@ -75,9 +88,19 @@ export default function LoginPage() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  async function requestCode(e: React.MouseEvent) {
+  function switchView(next: View) {
+    setView(next);
+    setMsg("");
+    setCodeMsg("");
+    setCodeSent(false);
+    setCode("");
+    setNewPassword("");
+  }
+
+  async function requestCode(e: React.MouseEvent, purpose: SmsPurpose) {
     e.preventDefault();
     if (cooldown > 0 || !phone) return;
+    setCodePurpose(purpose);
     await fetchCaptcha();
     setShowCaptchaModal(true);
   }
@@ -94,12 +117,18 @@ export default function LoginPage() {
         "/auth/sms/request-code",
         {
           method: "POST",
-          body: JSON.stringify({ client_id: oauth.clientId, phone, captcha_key: captchaKey, captcha_answer: captchaAnswer }),
+          body: JSON.stringify({
+            client_id: oauth.clientId,
+            phone,
+            purpose: codePurpose,
+            captcha_key: captchaKey,
+            captcha_answer: captchaAnswer,
+          }),
         },
       );
       if (import.meta.env.DEV) setDebugCode(r.debug_code ?? "");
       setCodeSent(true);
-      setCodeMsg(t("login.codeSent"));
+      setCodeMsg("");
       setCooldown(60);
       setShowCaptchaModal(false);
     } catch (err) {
@@ -117,24 +146,29 @@ export default function LoginPage() {
     }
   }
 
+  async function finishSmsFlow(endpoint: string, extra: Record<string, unknown>) {
+    const r = await api<{ redirect_uri: string }>(endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        client_id: oauth.clientId,
+        redirect_uri: oauth.redirectUri,
+        phone,
+        code,
+        state: oauth.state,
+        ...extra,
+      }),
+    });
+    const parsed = redirectUriSchema.safeParse(r);
+    if (parsed.success) safeRedirect(parsed.data.redirect_uri);
+  }
+
   async function login(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMsg("");
     try {
       if (mode === "sms") {
-        const r = await api<{ redirect_uri: string }>("/auth/sms/login", {
-          method: "POST",
-          body: JSON.stringify({
-            client_id: oauth.clientId,
-            redirect_uri: oauth.redirectUri,
-            phone,
-            code,
-            state: oauth.state,
-          }),
-        });
-        const parsed = redirectUriSchema.safeParse(r);
-        if (parsed.success) safeRedirect(parsed.data.redirect_uri);
+        await finishSmsFlow("/auth/sms/login", {});
       } else {
         const r = await api<{ redirect_uri: string }>("/auth/email/login-password", {
           method: "POST",
@@ -149,6 +183,32 @@ export default function LoginPage() {
         const parsedPwd = redirectUriSchema.safeParse(r);
         if (parsedPwd.success) safeRedirect(parsedPwd.data.redirect_uri);
       }
+    } catch (err) {
+      setMsg((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function register(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setMsg("");
+    try {
+      await finishSmsFlow("/auth/sms/register", {});
+    } catch (err) {
+      setMsg((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setMsg("");
+    try {
+      await finishSmsFlow("/auth/sms/reset-password", { new_password: newPassword });
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -193,7 +253,7 @@ export default function LoginPage() {
         type: credential.type,
         response: {
           authenticatorData: bufferEncode(authResponse.authenticatorData),
-          clientDataJSON: bufferEncode(authResponse.clientDataJSON),
+          clientDataJSON: bufferEncode(credential.response.clientDataJSON),
           signature: bufferEncode(authResponse.signature),
           userHandle: authResponse.userHandle ? bufferEncode(authResponse.userHandle) : null,
         },
@@ -221,6 +281,63 @@ export default function LoginPage() {
   }
 
   const smsAvailable = loginMethods.length === 0 || loginMethods.includes("sms_code");
+  const tabsAvailable = smsAvailable || passwordEnabled;
+
+  const secondaryProviders = (
+    <>
+      {loginMethods.includes("wechat") && (
+        <a className="social-btn" href={providerUrl("wechat", oauth)} rel="noopener noreferrer">
+          <FaWeixin size={18} color="#07C160" />
+          <span>{t("login.wechat")}</span>
+        </a>
+      )}
+      {loginMethods.includes("google") && (
+        <a className="social-btn" href={providerUrl("google", oauth)} rel="noopener noreferrer">
+          <GoogleIcon size={18} />
+          <span>{t("login.google")}</span>
+        </a>
+      )}
+      {loginMethods.includes("github") && (
+        <a className="social-btn" href={providerUrl("github", oauth)} rel="noopener noreferrer">
+          <GithubIcon size={18} />
+          <span>{t("login.github")}</span>
+        </a>
+      )}
+      {loginMethods.includes("passkey") && (
+        <button
+          type="button"
+          className="social-btn"
+          onClick={handlePasskeyLogin}
+          disabled={loading}
+        >
+          <KeyRound size={18} />
+          <span>{t("login.passkey", "Passkey")}</span>
+        </button>
+      )}
+    </>
+  );
+
+  const smsCodeField = (purpose: SmsPurpose) => (
+    <label className="field">
+      <span>{t("login.code")}</span>
+      <OtpInput value={code} onChange={setCode} />
+      <div className="otp-meta">
+        <span className="otp-hint">{codeSent ? t("login.noCode") : ""}</span>
+        <button
+          type="button"
+          className="text-btn send-code-link"
+          onClick={(e) => requestCode(e, purpose)}
+          disabled={loading || !phone || cooldown > 0}
+        >
+          {cooldown > 0 ? t("login.resendIn", { seconds: cooldown }) : codeSent ? t("login.resend") : t("login.sendCode")}
+        </button>
+      </div>
+      {codeMsg && <span className="field-msg">{codeMsg}</span>}
+      {import.meta.env.DEV && debugCode && codeSent && (
+        <p className="field-msg">DEV: {debugCode}</p>
+      )}
+    </label>
+  );
 
   return (
     <main className="shell">
@@ -231,171 +348,235 @@ export default function LoginPage() {
             <div className="brand-mark">
               <ShieldCheck size={28} />
             </div>
-            <h1>{t("login.title", { appName })}</h1>
+            <h1>
+              {view === "register"
+                ? t("login.registerTitle", { appName })
+                : view === "forgot"
+                  ? t("login.forgotTitle")
+                  : t("login.title", { appName })}
+            </h1>
           </div>
+          {view === "register" && <p className="auth-subtitle">{t("login.registerDesc")}</p>}
+          {view === "forgot" && <p className="auth-subtitle">{t("login.forgotDesc")}</p>}
 
-          {(smsAvailable || passwordEnabled) && (
-          <div className="setup-tabs login-tabs" role="tablist">
-            {smsAvailable && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "sms"}
-              className={mode === "sms" ? "active" : ""}
-              onClick={() => { setMode("sms"); setMsg(""); }}
-            >
-              {t("login.tabSms")}
+          {view !== "login" && (
+            <button type="button" className="back-link" onClick={() => switchView("login")}>
+              ← {t("login.backToLogin")}
             </button>
-            )}
-            {passwordEnabled && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "password"}
-              className={mode === "password" ? "active" : ""}
-              onClick={() => { setMode("password"); setMsg(""); }}
-            >
-              {t("login.tabPassword")}
-            </button>
-            )}
-          </div>
           )}
 
-          <form className="email-form" onSubmit={login}>
-            {mode === "sms" ? (
-              <>
-                <label className="field">
-                  <span>{t("login.phone")}</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder={t("login.phonePlaceholder")}
-                    autoComplete="tel"
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("login.code")}</span>
-                  <div className="code-row">
-                    <input
-                      type="text"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      placeholder={t("login.codePlaceholder")}
-                      maxLength={6}
-                      required
-                    />
+          {view === "login" && (
+            <>
+              {tabsAvailable && (
+                <div className="setup-tabs login-tabs" role="tablist">
+                  {smsAvailable && (
                     <button
                       type="button"
-                      className="send-code-btn inline"
-                      onClick={requestCode}
-                      disabled={loading || !phone || cooldown > 0}
+                      role="tab"
+                      aria-selected={mode === "sms"}
+                      className={mode === "sms" ? "active" : ""}
+                      onClick={() => { setMode("sms"); setMsg(""); }}
                     >
-                      {cooldown > 0 ? `${cooldown}s` : codeSent ? t("login.resend") : t("login.sendCode")}
+                      {t("login.tabSms")}
                     </button>
-                    {codeMsg && <p className="field-msg">{codeMsg}</p>}
-                  </div>
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="field">
-                  <span>{t("login.identifier")}</span>
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder={t("login.identifierPlaceholder")}
-                    autoComplete="username"
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("login.password")}</span>
-                  <div className="pwd-wrap">
-                    <input
-                      type={showPwd ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={t("login.pwdPlaceholder")}
-                      autoComplete="current-password"
-                      required
-                    />
+                  )}
+                  {passwordEnabled && (
                     <button
                       type="button"
-                      className="pwd-toggle"
-                      onClick={() => setShowPwd(!showPwd)}
-                      aria-label="toggle password"
+                      role="tab"
+                      aria-selected={mode === "password"}
+                      className={mode === "password" ? "active" : ""}
+                      onClick={() => { setMode("password"); setMsg(""); }}
                     >
-                      {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {t("login.tabPassword")}
                     </button>
-                  </div>
-                </label>
-              </>
-            )}
+                  )}
+                </div>
+              )}
 
-            <button
-              type="submit"
-              className="primary-btn"
-              disabled={loading}
-            >
-              {loading ? t("login.logging") : t("login.submit")}
-            </button>
-          </form>
+              <form className="email-form" onSubmit={login}>
+                  {mode === "sms" ? (
+                    <>
+                      <label className="field">
+                        <span>{t("login.phone")}</span>
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder={t("login.phonePlaceholder")}
+                          autoComplete="tel"
+                          required
+                        />
+                      </label>
+                      {smsCodeField("login")}
+                    </>
+                  ) : (
+                    <>
+                      <label className="field">
+                        <span>{t("login.identifier")}</span>
+                        <input
+                          type="text"
+                          value={identifier}
+                          onChange={(e) => setIdentifier(e.target.value)}
+                          placeholder={t("login.identifierPlaceholder")}
+                          autoComplete="username"
+                          required
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t("login.password")}</span>
+                        <div className="pwd-wrap">
+                          <input
+                            type={showPwd ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder={t("login.pwdPlaceholder")}
+                            autoComplete="current-password"
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="pwd-toggle"
+                            onClick={() => setShowPwd(!showPwd)}
+                            aria-label="toggle password"
+                          >
+                            {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                        <div className="otp-meta">
+                          <button
+                            type="button"
+                            className="text-btn send-code-link"
+                            onClick={() => switchView("forgot")}
+                          >
+                            {t("login.forgotLink")}
+                          </button>
+                        </div>
+                      </label>
+                    </>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="primary-btn"
+                    disabled={loading}
+                  >
+                    {loading ? t("login.logging") : t("login.submit")}
+                  </button>
+
+                  {(loginMethods.includes("wechat") || loginMethods.includes("google") || loginMethods.includes("github") || loginMethods.includes("passkey")) && (
+                    <div className="or-divider">
+                      <span />
+                      <small>OR</small>
+                      <span />
+                    </div>
+                  )}
+                  {secondaryProviders}
+                </form>
+
+              {allowRegistration && smsAvailable && (
+                <p className="switch-text">
+                  {t("login.noAccount")}{" "}
+                  <button type="button" onClick={() => switchView("register")}>
+                    {t("login.toRegister")}
+                  </button>
+                </p>
+              )}
+            </>
+          )}
+
+          {view === "register" && (
+            <form className="email-form" onSubmit={register}>
+              <label className="field">
+                <span>{t("login.phone")}</span>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder={t("login.phonePlaceholder")}
+                  autoComplete="tel"
+                  required
+                />
+              </label>
+              {smsCodeField("register")}
+              <button type="submit" className="primary-btn" disabled={loading || code.length < 4}>
+                {loading ? t("login.logging") : t("login.registerSubmit")}
+              </button>
+            </form>
+          )}
+
+          {view === "forgot" && (
+            <form className="email-form" onSubmit={resetPassword}>
+              <label className="field">
+                <span>{t("login.phone")}</span>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder={t("login.phonePlaceholder")}
+                  autoComplete="tel"
+                  required
+                />
+              </label>
+              {smsCodeField("reset_password")}
+              <label className="field">
+                <span>{t("login.newPassword")}</span>
+                <div className="pwd-wrap">
+                  <input
+                    type={showNewPwd ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={t("login.newPwdPlaceholder")}
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    className="pwd-toggle"
+                    onClick={() => setShowNewPwd(!showNewPwd)}
+                    aria-label="toggle password"
+                  >
+                    {showNewPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="field-hint">{t("login.pwdHint")}</p>
+              </label>
+              <button type="submit" className="primary-btn" disabled={loading || code.length < 4 || newPassword.length < 8}>
+                {loading ? t("login.logging") : t("login.forgotSubmit")}
+              </button>
+            </form>
+          )}
 
           {msg && (
             <p className="msg">
               {msg}
-              {import.meta.env.DEV && debugCode ? ` (${debugCode})` : ""}
+              {import.meta.env.DEV && debugCode && view === "login" && mode === "sms" ? ` (${debugCode})` : ""}
             </p>
           )}
 
-          <div className="or-divider">
-            <span />
-            <small>OR</small>
-            <span />
-          </div>
-
-          {loginMethods.includes("google") && (
-          <a className="social-btn" href={providerUrl("google", oauth)} rel="noopener noreferrer">
-            <GoogleIcon size={18} />
-            <span>{t("login.google")}</span>
-          </a>
+          {view === "register" && (
+            <p className="switch-text">
+              {t("login.haveAccount")}{" "}
+              <button type="button" onClick={() => switchView("login")}>
+                {t("login.toLogin")}
+              </button>
+            </p>
+          )}
+          {view === "forgot" && (
+            <p className="switch-text">
+              {t("login.remembered")}{" "}
+              <button type="button" onClick={() => switchView("login")}>
+                {t("login.toLogin")}
+              </button>
+            </p>
           )}
 
-          {loginMethods.includes("github") && (
-          <a className="social-btn" href={providerUrl("github", oauth)} rel="noopener noreferrer">
-            <GithubIcon size={18} />
-            <span>{t("login.github")}</span>
-          </a>
+          {view === "login" && (
+            <p className="switch-text">
+              <a href="/account/settings">{t("login.accountSettings")}</a>
+            </p>
           )}
-
-          {loginMethods.includes("wechat") && (
-          <a className="social-btn" href={providerUrl("wechat", oauth)} rel="noopener noreferrer">
-            <FaWeixin size={18} color="#07C160" />
-            <span>{t("login.wechat")}</span>
-          </a>
-          )}
-
-          {loginMethods.includes("passkey") && (
-          <button
-            type="button"
-            className="social-btn"
-            onClick={handlePasskeyLogin}
-            disabled={loading}
-          >
-            <KeyRound size={18} />
-            <span>{t("login.passkey", "Passkey")}</span>
-          </button>
-          )}
-
-          {allowRegistration && smsAvailable && (
-            <p className="switch-text">{t("login.autoRegister")}</p>
-          )}
-          <p className="switch-text">
-            <a href="/account/settings">{t("login.accountSettings")}</a>
-          </p>
           <p className="terms">
             {t("login.termsPre")}
             <a href="#">{t("login.tos")}</a>

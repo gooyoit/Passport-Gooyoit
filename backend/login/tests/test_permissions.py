@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 
 from app import models
 
-from conftest import create_test_application, request_email_code
+from conftest import create_test_application, request_sms_code, sms_sender  # noqa: F401
 
 
 def test_default_and_explicit_roles_grant_permission_union(
     client: TestClient,
     db_session: Session,
+    sms_sender,
 ) -> None:
     """PyCasbin grants permissions from default and explicit roles."""
     application = create_test_application(db_session, name="Ops", redirect_uris=["https://ops.example.com/callback"])
@@ -42,15 +43,15 @@ def test_default_and_explicit_roles_grant_permission_union(
     )
     db_session.commit()
 
-    debug_code = request_email_code(
-        client, application["client_id"], "admin@example.com"
+    debug_code = request_sms_code(
+        client, application["client_id"], "13800138000"
     )["debug_code"]
     auth_code = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://ops.example.com/callback",
-            "email": "admin@example.com",
+            "phone": "13800138000",
             "code": debug_code,
         },
     ).json()["code"]
@@ -72,15 +73,15 @@ def test_default_and_explicit_roles_grant_permission_union(
     )
     db_session.commit()
 
-    debug_code = request_email_code(
-        client, application["client_id"], "admin@example.com"
+    debug_code = request_sms_code(
+        client, application["client_id"], "13800138000"
     )["debug_code"]
     auth_code = client.post(
-        "/auth/email/login",
+        "/auth/sms/login",
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://ops.example.com/callback",
-            "email": "admin@example.com",
+            "phone": "13800138000",
             "code": debug_code,
         },
     ).json()["code"]
