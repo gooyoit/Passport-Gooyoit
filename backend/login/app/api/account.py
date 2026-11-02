@@ -9,29 +9,24 @@ from app.core.redis import get_redis_client
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps import get_account_user
-from app.models import Application, User
+from app.models import User
 from app.schemas import (
     AccountCredentialsRequest,
     AccountEmailBindRequest,
-    AccountEmailCodeRequest,
     AccountLinkRequest,
     AccountLinkResponse,
     AccountProfileResponse,
-    EmailCodeResponse,
 )
 from app.services.account import (
     bind_email_to_current_user,
-    find_user_by_email,
     get_account_profile,
     link_current_user_to_existing,
     set_account_credentials,
 )
-from app.services.auth import SSO_COOKIE_NAME, issue_email_code, set_sso_cookie
-from app.services.aliyun_captcha import verify_captcha
+from app.services.auth import SSO_COOKIE_NAME, set_sso_cookie
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_login_lockout,
-    check_request_code_rate_limit,
     clear_failed_login,
     get_client_ip,
     record_failed_login,
@@ -57,70 +52,15 @@ def read_profile(
     return get_account_profile(db, user=user)
 
 
-@router.post("/email/send-code", response_model=EmailCodeResponse)
-def send_bind_code(
-    payload: AccountEmailCodeRequest,
-    request: Request,
-    account: tuple[User, int | None] = Depends(get_account_user),
-    db: Session = Depends(get_db),
-) -> EmailCodeResponse:
-    """Send a bind-purpose verification code to an email."""
-    user, application_id = account
-    email = str(payload.email).lower()
-
-    # Reject doomed requests before sending mail.
-    other = find_user_by_email(db, email=email)
-    if other is not None and other.id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email is already bound to another account",
-        )
-    if user.email and user.email.lower() != email:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email is already bound to this account",
-        )
-
-    redis_client = get_redis_client()
-    try:
-        check_request_code_rate_limit(redis_client, email, get_client_ip(request))
-    except RateLimitExceeded as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=e.detail,
-            headers={"Retry-After": str(e.retry_after)},
-        )
-
-    if application_id is None:
-        # The SSO cookie path lacks the freshness of a 2h access token,
-        # so a captcha proof is required before mailing a code.
-        if (
-            not payload.captcha_verify_param
-            or not verify_captcha(payload.captcha_verify_param)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Captcha verification failed",
-            )
-
-    client_id = None
-    if application_id is not None:
-        application = db.get(Application, application_id)
-        client_id = application.client_id if application else None
-    code = issue_email_code(db, client_id=client_id, email=email, purpose="bind")
-    logger.info("account_bind_code_sent", user_id=user.id, via=_via(application_id))
-    return EmailCodeResponse(sent=True, debug_code=code if settings.debug else None)
-
-
 @router.post("/email/bind", response_model=AccountProfileResponse)
 def bind_email(
     payload: AccountEmailBindRequest,
     account: tuple[User, int | None] = Depends(get_account_user),
     db: Session = Depends(get_db),
 ) -> AccountProfileResponse:
-    """Bind a verified email to the current account."""
+    """Bind an email to the current account (format-checked, ownership unverified)."""
     user, application_id = account
-    bind_email_to_current_user(db, user=user, email=str(payload.email), code=payload.code)
+    bind_email_to_current_user(db, user=user, email=str(payload.email))
     db.commit()
     logger.info("account_email_bound", user_id=user.id, via=_via(application_id))
     return get_account_profile(db, user=user)

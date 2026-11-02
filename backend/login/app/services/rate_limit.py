@@ -41,25 +41,6 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def check_request_code_rate_limit(redis_client: Redis | None, email: str, ip: str) -> None:
-    if redis_client is None:
-        return
-
-    email_key = f"rl:email:{email}"
-    count = redis_client.incr(email_key)
-    if count == 1:
-        redis_client.expire(email_key, 60)
-    if count > settings.rate_limit_email_per_minute:
-        raise RateLimitExceeded("Email rate limit exceeded", redis_client.ttl(email_key))
-
-    ip_key = f"rl:ip:{ip}"
-    count = redis_client.incr(ip_key)
-    if count == 1:
-        redis_client.expire(ip_key, 3600)
-    if count > settings.rate_limit_ip_per_hour:
-        raise RateLimitExceeded("IP rate limit exceeded", redis_client.ttl(ip_key))
-
-
 def record_failed_login(redis_client: Redis | None, email: str, ip: str) -> None:
     if redis_client is None:
         return

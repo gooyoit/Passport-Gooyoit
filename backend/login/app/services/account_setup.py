@@ -16,7 +16,7 @@ from app.core.redis import get_redis_client
 from app.core.security import hash_password, utcnow, verify_password
 from app.models import User, UserIdentity, UserStatus
 from app.schemas import AccountSetupRequest
-from app.services.account import consume_bind_email_code, find_local_user
+from app.services.account import find_local_user
 from app.services.applications import get_active_application_by_client_id
 from app.services.auth import (
     _set_sso_cookie_if_enabled,
@@ -128,7 +128,6 @@ def complete_account_setup(
         )
         user = None
         if email:
-            consume_bind_email_code(db, email=email, code=payload.email_code)
             user = db.scalar(select(User).where(func.lower(User.email) == email))
             if user is not None:
                 if user.status != UserStatus.ACTIVE:

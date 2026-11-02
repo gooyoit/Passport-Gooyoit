@@ -7,7 +7,6 @@ from app.services.rate_limit import (
     RateLimitExceeded,
     _is_trusted,
     check_login_lockout,
-    check_request_code_rate_limit,
     clear_failed_login,
     get_client_ip,
     record_failed_login,
@@ -76,28 +75,6 @@ class TestRateLimitExceeded:
         exc = RateLimitExceeded("Email rate limit exceeded", 45)
         assert exc.detail == "Email rate limit exceeded"
         assert exc.retry_after == 45
-
-
-class TestCheckRequestCodeRateLimit:
-    def test_passes_when_redis_is_none(self):
-        check_request_code_rate_limit(None, "test@example.com", "1.2.3.4")
-
-    def test_raises_when_email_rate_exceeded(self):
-        redis_mock = MagicMock()
-        redis_mock.incr.return_value = 10
-        with patch("app.services.rate_limit.settings") as mock_settings:
-            mock_settings.rate_limit_email_per_minute = 5
-            with pytest.raises(RateLimitExceeded):
-                check_request_code_rate_limit(redis_mock, "test@example.com", "1.2.3.4")
-
-    def test_raises_when_ip_rate_exceeded(self):
-        redis_mock = MagicMock()
-        redis_mock.incr.side_effect = [1, 20]
-        with patch("app.services.rate_limit.settings") as mock_settings:
-            mock_settings.rate_limit_email_per_minute = 5
-            mock_settings.rate_limit_ip_per_hour = 10
-            with pytest.raises(RateLimitExceeded):
-                check_request_code_rate_limit(redis_mock, "test@example.com", "1.2.3.4")
 
 
 class TestLoginLockout:

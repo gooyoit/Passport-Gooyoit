@@ -126,16 +126,13 @@ def create_test_application(
 
 @pytest.fixture(autouse=True)
 def _local_only_redis(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Skip rate limits, accept every captcha token, and never send real email."""
+    """Skip rate limits and accept every SMS captcha token in tests."""
     from app.api import account as account_api
     from app.api import auth as auth_api
-    from app.services import auth as auth_service
 
     monkeypatch.setattr(auth_api, "get_redis_client", lambda: None)
     monkeypatch.setattr(account_api, "get_redis_client", lambda: None)
     monkeypatch.setattr(auth_api, "verify_captcha", lambda param: True)
-    monkeypatch.setattr(account_api, "verify_captcha", lambda param: True)
-    monkeypatch.setattr(auth_service, "send_verification_code", lambda email, code: True)
 
 
 @pytest.fixture()

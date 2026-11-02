@@ -24,7 +24,6 @@ from app.models import (
     Application,
     ApplicationClientSecret,
     ApplicationUser,
-    EmailVerificationCode,
     OAuthAuthorizationCode,
     OAuthToken,
     PhoneVerificationCode,
@@ -32,7 +31,6 @@ from app.models import (
     User,
     UserIdentity,
 )
-from app.services.email import send_verification_code
 from app.services.sms import send_sms_code
 from app.services.applications import (
     get_active_application_by_client_id,
@@ -81,47 +79,6 @@ def verify_client_secret(db: Session, application: Application, client_secret: s
     ).all()
     return any(verify_secret(client_secret, s.secret_hash) for s in secrets)
 
-
-def issue_email_code(
-    db: Session, *, client_id: str | None, email: str, purpose: str = "login"
-) -> str:
-    """Create an email verification code."""
-    application = get_active_application_by_client_id(db, client_id) if client_id else None
-    if application is None and client_id is not None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if application is None and purpose != "bind":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="client_id is required for this purpose",
-        )
-    if application is not None and purpose == "register" and not application.enable_public_users:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration is disabled",
-        )
-    if application is not None and purpose != "bind" and not is_login_method_enabled(db, application.id, "email_code"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email code login is disabled",
-        )
-
-    code = random_digits()
-    sent = send_verification_code(email, code)
-    if not sent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to send verification email",
-        )
-    verification = EmailVerificationCode(
-        email=email.lower(),
-        code_hash=hash_secret(code),
-        purpose=purpose,
-        expires_at=utcnow() + timedelta(seconds=settings.email_code_ttl_seconds),
-    )
-    db.add(verification)
-    db.commit()
-    logger.info("email_code_issued", email=email, purpose=purpose, sent=sent)
-    return code
 
 
 def issue_sms_code(db: Session, *, client_id: str, phone: str, purpose: str = "login") -> str:

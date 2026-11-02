@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = 7200
     refresh_token_ttl_seconds: int = 2_592_000
     authorization_code_ttl_seconds: int = 300
-    email_code_ttl_seconds: int = 600
     sms_code_ttl_seconds: int = 600
     sms_rate_phone_per_minute: int = 1
     sms_rate_phone_per_hour: int = 5
@@ -44,7 +43,6 @@ class Settings(BaseSettings):
     aliyun_sms_template_register: str = ""
     aliyun_sms_template_reset_password: str = ""
     aliyun_sms_endpoint: str = "dysmsapi.aliyuncs.com"
-    resend_api_key: str = ""
     # Aliyun Captcha 2.0 (VerifyIntelligentCaptcha); empty scene_id disables captcha checks
     aliyun_captcha_access_key_id: str = ""
     aliyun_captcha_access_key_secret: str = ""

@@ -6,10 +6,9 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.redis import get_redis_client
-from app.core.security import hash_password, utcnow, verify_password, verify_secret
+from app.core.security import hash_password, utcnow, verify_password
 from app.models import (
     ApplicationUser,
-    EmailVerificationCode,
     OAuthAuthorizationCode,
     OAuthToken,
     SsoSession,
@@ -23,26 +22,6 @@ from app.services.rate_limit import check_login_lockout, clear_failed_login, rec
 logger = structlog.get_logger(__name__)
 
 _LOCKOUT_SCOPE = "account"
-
-
-def consume_bind_email_code(db: Session, *, email: str, code: str | None) -> None:
-    """Verify and consume a bind-purpose email verification code."""
-    if not code:
-        raise HTTPException(status_code=400, detail="Email verification code is required")
-    verification = db.scalar(
-        select(EmailVerificationCode)
-        .where(
-            EmailVerificationCode.email == email,
-            EmailVerificationCode.purpose == "bind",
-            EmailVerificationCode.used_at.is_(None),
-            EmailVerificationCode.expires_at > utcnow(),
-        )
-        .order_by(EmailVerificationCode.created_at.desc())
-        .with_for_update()
-    )
-    if verification is None or not verify_secret(code, verification.code_hash):
-        raise HTTPException(status_code=400, detail="Invalid email verification code")
-    verification.used_at = utcnow()
 
 
 def find_local_user(db: Session, *, identifier: str) -> User | None:
@@ -79,10 +58,13 @@ def get_email_identity(db: Session, *, email: str) -> UserIdentity | None:
     )
 
 
-def bind_email_to_current_user(db: Session, *, user: User, email: str, code: str | None) -> None:
-    """Attach a verified email to the authenticated account."""
+def bind_email_to_current_user(db: Session, *, user: User, email: str) -> None:
+    """Attach an email to the authenticated account without proving ownership.
+
+    Binding is a deliberate user action; only the format and the
+    not-taken-by-someone-else checks apply.
+    """
     normalized = email.lower()
-    consume_bind_email_code(db, email=normalized, code=code)
 
     other = find_user_by_email(db, email=normalized)
     if other is not None and other.id != user.id:

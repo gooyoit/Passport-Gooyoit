@@ -55,7 +55,6 @@ if not has_password or 不存在 provider == "email" 的 identity:
 | 401 | 未带 token / token 无效或过期 |
 | 403 | 用户被禁用 |
 | 429 | 触发速率限制（响应头含 `Retry-After` 秒数） |
-| 503 | 邮件发送服务暂不可用（仅发码接口） |
 
 ### 查询当前账号 `GET /account/profile`
 
@@ -75,7 +74,7 @@ curl -H "Authorization: Bearer <access_token>" \
 }
 ```
 
-### 发送邮箱绑定验证码 `POST /account/email/send-code`
+### 绑定邮箱 `POST /account/email/bind`
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
@@ -85,37 +84,19 @@ curl -H "Authorization: Bearer <access_token>" \
 curl -X POST -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com"}' \
-  https://passport.gooyoit.com/api/account/email/send-code
-```
-
-```json
-{ "sent": true, "debug_code": null }
-```
-
-说明：
-
-- 邮箱已被其他账号绑定（`409`），或用户已绑定其他邮箱（`409`，当前版本不支持换绑）时**不会发送邮件**，直接返回错误。
-- 验证码 10 分钟内有效，一次性使用。
-- 速率限制：同一邮箱每分钟 1 次、同一 IP 每小时 10 次。
-- Passport 自己的账号中心页走 SSO cookie 调用同一接口时需要额外传 `captcha_verify_param`（阿里云验证码 2.0 的验签参数，来自页面内的人机验证组件）；**业务系统带 Bearer token 调用时不需要。**
-
-### 绑定邮箱 `POST /account/email/bind`
-
-| 参数 | 必填 | 说明 |
-|---|---|---|
-| `email` | 是 | 与发码一致的邮箱 |
-| `code` | 是 | 用户从邮箱收到的 6 位验证码 |
-
-```bash
-curl -X POST -H "Authorization: Bearer <access_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com", "code": "123456"}' \
   https://passport.gooyoit.com/api/account/email/bind
 ```
 
-成功返回最新的 profile（同 `GET /account/profile`），前端无需二次拉取。重复绑定同一邮箱幂等成功（仍需有效验证码）。
+成功返回最新的 profile（同 `GET /account/profile`），前端无需二次拉取。
 
-错误：`400` 验证码错误或过期；`409` 邮箱已被其他账号绑定。
+说明：
+
+- 绑定是用户的主动操作，**只校验邮箱格式，不验证所有权**（不发验证码邮件）。绑定后该邮箱即可配合密码登录。
+- 邮箱已被其他账号绑定（`409`）或用户已绑定其他邮箱（`409`，当前版本不支持换绑）时返回错误。
+- 重复绑定同一邮箱幂等成功。
+- 返回的 `email_verified` 为 `true`：绑定即视为已确认，不会触发额外验证流程。
+
+错误：`409` 邮箱已被其他账号绑定，或用户已绑定其他邮箱。
 
 ### 合并进已有账号 `POST /account/link-existing`
 
@@ -220,7 +201,7 @@ window.location.href =
 1. **CORS**：浏览器端跨域直调时需将业务系统域名加入 Passport 的 `frontend_origins` 白名单；推荐业务系统由服务端转发调用，避免暴露 token 与 CORS 问题。
 2. **token 窗口**：access_token 有效期 2 小时，过期后用 refresh_token 换新（`POST /oauth/token/refresh`）。
 3. **不要在客户端解码 token**：将 access_token 视为 opaque 字符串。
-4. **安全边界**：绑定邮箱必须通过邮箱验证码证明所有权；覆盖已有密码必须提供当前密码。业务系统无法替用户绕过这两道证明。
+4. **安全边界**：绑定邮箱为用户主动操作，仅校验格式不验证所有权（若业务上要求证明邮箱所有权，请自行发信确认）；覆盖已有密码必须提供当前密码，业务系统无法替用户绕过这道证明。
 5. **退出必须顶层跳转**：见上文「退出登录」——跨域 fetch 撤不掉 SSO 会话。
 
 ## 集成场景示例
@@ -231,17 +212,15 @@ window.location.href =
 1. 业务系统通过 /oauth/token 拿到 access_token
 2. 调 GET /oauth/userinfo → has_password=false, identities 只有 wechat
 3. 业务系统前端展示「完善账号资料」入口
-4. 用户填写邮箱 → 业务系统调 POST /account/email/send-code
-5. 用户输入收到的验证码 → POST /account/email/bind
-6. 用户设置密码 → POST /account/credentials {username, password}
-7. 再次调 GET /oauth/userinfo → has_password=true, identities 含 email
+4. 用户填写邮箱 → 业务系统调 POST /account/email/bind {email}
+5. 用户设置密码 → POST /account/credentials {username, password}
+6. 再次调 GET /oauth/userinfo → has_password=true, identities 含 email
 ```
 
-用户反馈「这个邮箱是我已有的账号」：
+用户填写的邮箱已被其他账号占用（bind 返回 409 "already bound to another account"），且用户确认那是自己的账号：
 
 ```
-1. send-code 返回 409 "already bound to another account"
-2. 前端提示切换为合并模式，收集已有账号的用户名/邮箱 + 密码
-3. POST /account/link-existing {identifier, password}
-4. 用响应中的新 access_token 替换旧 token；profile 即为目标账号
+1. 前端提示切换为合并模式，收集已有账号的用户名/邮箱 + 密码
+2. POST /account/link-existing {identifier, password}
+3. 用响应中的新 access_token 替换旧 token；profile 即为目标账号
 ```

@@ -13,7 +13,6 @@ import {
 import { FaWeixin } from "react-icons/fa";
 import GoogleIcon from "../components/GoogleIcon";
 import { api } from "../lib/utils";
-import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type Identity = { provider: string; provider_email: string | null };
 
@@ -57,38 +56,8 @@ export default function AccountSettingsPage() {
   const [editing, setEditing] = useState<Section>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [codeMessage, setCodeMessage] = useState("");
-  const [cooldown, setCooldown] = useState(0);
-
-  async function handleCaptchaVerify(captchaVerifyParam: string) {
-    try {
-      await api("/account/email/send-code", {
-        method: "POST",
-        body: JSON.stringify({ email, captcha_verify_param: captchaVerifyParam }),
-      });
-      setCodeMessage(t("accountSettings.codeSent"));
-      setCooldown(60);
-      return { captchaResult: true, bizResult: true };
-    } catch (error) {
-      const detail = (error as Error).message;
-      if (detail.includes("already bound to another account")) {
-        setShowMerge(true);
-        setMergeIdentifier(email);
-        setMessage(t("accountSettings.mergeHint"));
-        return { captchaResult: true, bizResult: false };
-      }
-      if (detail.includes("Captcha verification failed")) {
-        return { captchaResult: false, bizResult: false };
-      }
-      setMessage(detail);
-      return { captchaResult: true, bizResult: false };
-    }
-  }
-
-  const captcha = useAliyunCaptcha(handleCaptchaVerify);
 
   const [email, setEmail] = useState("");
-  const [emailCode, setEmailCode] = useState("");
   const [showMerge, setShowMerge] = useState(false);
   const [mergeIdentifier, setMergeIdentifier] = useState("");
   const [mergePassword, setMergePassword] = useState("");
@@ -109,22 +78,9 @@ export default function AccountSettingsPage() {
       .catch(() => setAuthState("guest"));
   }, []);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = window.setTimeout(() => setCooldown((v) => v - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [cooldown]);
-
-  function update(key: "emailCode" | "username" | "password" | "currentPassword" | "phone") {
-    const setters = { emailCode: setEmailCode, username: setUsername, password: setPassword, currentPassword: setCurrentPassword, phone: setPhone };
+  function update(key: "username" | "password" | "currentPassword" | "phone") {
+    const setters = { username: setUsername, password: setPassword, currentPassword: setCurrentPassword, phone: setPhone };
     return (event: React.ChangeEvent<HTMLInputElement>) => setters[key](event.target.value);
-  }
-
-  function requestEmailCode() {
-    if (!email || cooldown > 0) return;
-    if (!captcha.trigger()) {
-      setMessage(t("accountSettings.captchaUnavailable"));
-    }
   }
 
   async function mergeExisting(event: FormEvent) {
@@ -142,8 +98,6 @@ export default function AccountSettingsPage() {
       setMergePassword("");
       setEditing(null);
       setEmail("");
-      setEmailCode("");
-      setCodeMessage("");
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -158,15 +112,20 @@ export default function AccountSettingsPage() {
     try {
       const updated = await api<Profile>("/account/email/bind", {
         method: "POST",
-        body: JSON.stringify({ email, code: emailCode }),
+        body: JSON.stringify({ email }),
       });
       setProfile(updated);
       setEditing(null);
       setEmail("");
-      setEmailCode("");
-      setCodeMessage("");
     } catch (error) {
-      setMessage((error as Error).message);
+      const detail = (error as Error).message;
+      if (detail.includes("already bound to another account")) {
+        setShowMerge(true);
+        setMergeIdentifier(email);
+        setMessage(t("accountSettings.mergeHint"));
+      } else {
+        setMessage(detail);
+      }
     } finally {
       setBusy(false);
     }
@@ -296,16 +255,7 @@ export default function AccountSettingsPage() {
                 <span>{t("accountSettings.email")}</span>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="m@example.com" autoComplete="email" required />
               </label>
-              <label className="field">
-                <span>{t("accountSettings.code")}</span>
-                <div className="code-row">
-                  <input value={emailCode} onChange={update("emailCode")} maxLength={6} placeholder={t("accountSettings.codePlaceholder")} required />
-                  <button type="button" className="send-code-btn inline" onClick={requestEmailCode} disabled={busy || cooldown > 0}>
-                    {cooldown > 0 ? `${cooldown}s` : t("accountSettings.sendCode")}
-                  </button>
-                  {codeMessage && <p className="field-msg">{codeMessage}</p>}
-                </div>
-              </label>
+              <p className="field-msg">{t("accountSettings.emailHint")}</p>
               <button className="primary-btn" type="submit" disabled={busy}>{busy ? t("accountSettings.working") : t("accountSettings.confirmBind")}</button>
             </form>
           )}
@@ -399,16 +349,6 @@ export default function AccountSettingsPage() {
         </p>
         <a className="text-btn settings-signout" href="/api/auth/logout">{t("accountSettings.signOut")}</a>
       </div>
-
-      <div id="aliyun-captcha-element" />
-      <button
-        ref={captcha.triggerRef}
-        id="aliyun-captcha-trigger"
-        type="button"
-        style={{ display: "none" }}
-        tabIndex={-1}
-        aria-hidden="true"
-      />
     </main>
   );
 }

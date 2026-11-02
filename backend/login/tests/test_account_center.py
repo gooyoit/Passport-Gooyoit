@@ -71,65 +71,17 @@ def test_profile_requires_authentication(client: TestClient) -> None:
     assert bad.status_code == 401
 
 
-def test_send_code_bearer_skips_cookie_captcha(
-    client: TestClient, db_session: Session
-) -> None:
-    """A fresh access token is a strong enough proof; no captcha needed."""
-    user = _wechat_skip_user(db_session)
-    headers, _ = _bearer(db_session, user)
-
-    response = client.post(
-        "/account/email/send-code", headers=headers, json={"email": "bind@example.com"}
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["debug_code"]
-
-    taken = User(email="owner@example.com", status="active")
-    db_session.add(taken)
-    db_session.commit()
-    conflict = client.post(
-        "/account/email/send-code", headers=headers, json={"email": "owner@example.com"}
-    )
-    assert conflict.status_code == 409
-
-
-def test_send_code_cookie_path_requires_captcha(
-    client: TestClient, db_session: Session
-) -> None:
-    """The SSO cookie path must pass a captcha before a code is mailed."""
-    user = _wechat_skip_user(db_session)
-    client.cookies.set("passport_sso", create_sso_session(db_session, user_id=user.id))
-
-    missing = client.post(
-        "/account/email/send-code", json={"email": "bind@example.com"}
-    )
-    assert missing.status_code == 400
-
-    ok = client.post(
-        "/account/email/send-code",
-        json={
-            "email": "bind@example.com",
-            "captcha_verify_param": "test-captcha-token",
-        },
-    )
-    assert ok.status_code == 200, ok.text
-    client.cookies.delete("passport_sso")
-
-
 def test_bind_email_happy_path_and_conflicts(
     client: TestClient, db_session: Session
 ) -> None:
-    """Binding consumes a valid code, is idempotent, and rejects taken emails."""
+    """Binding is immediate (no verification code), idempotent, and rejects taken emails."""
     user = _wechat_skip_user(db_session)
     headers, _ = _bearer(db_session, user)
 
-    code = client.post(
-        "/account/email/send-code", headers=headers, json={"email": "bind@example.com"}
-    ).json()["debug_code"]
     bound = client.post(
         "/account/email/bind",
         headers=headers,
-        json={"email": "bind@example.com", "code": code},
+        json={"email": "bind@example.com"},
     )
     assert bound.status_code == 200
     assert bound.json()["user"]["email"] == "bind@example.com"
@@ -145,49 +97,30 @@ def test_bind_email_happy_path_and_conflicts(
         == 1
     )
 
-    # Wrong code is rejected without consuming the valid one.
-    second = client.post(
-        "/account/email/send-code", headers=headers, json={"email": "bind@example.com"}
-    ).json()["debug_code"]
-    wrong = client.post(
-        "/account/email/bind",
-        headers=headers,
-        json={"email": "bind@example.com", "code": "000000"},
+    # Re-binding the same email is idempotent.
+    again = client.post(
+        "/account/email/bind", headers=headers, json={"email": "bind@example.com"}
     )
-    assert wrong.status_code == 400
-    retry = client.post(
-        "/account/email/bind",
-        headers=headers,
-        json={"email": "bind@example.com", "code": second},
-    )
-    assert retry.status_code == 200
+    assert again.status_code == 200
 
-    # A valid code still cannot bind an email that got taken meanwhile.
+    # An email owned by another account cannot be bound.
     late_user = _wechat_skip_user(db_session)
     late_headers, _ = _bearer(db_session, late_user)
-    taken_code = client.post(
-        "/account/email/send-code",
-        headers=late_headers,
-        json={"email": "late@example.com"},
-    ).json()["debug_code"]
-    latecomer = User(email="late@example.com", status="active")
-    db_session.add(latecomer)
-    db_session.commit()
     taken = client.post(
-        "/account/email/bind",
-        headers=late_headers,
-        json={"email": "late@example.com", "code": taken_code},
+        "/account/email/bind", headers=late_headers, json={"email": "bind@example.com"}
     )
     assert taken.status_code == 409
 
-    # The account already has an email; binding a different one is rejected.
+    # A fresh email binds fine, but swapping to a third party's email is rejected.
+    latecomer = client.post(
+        "/account/email/bind", headers=late_headers, json={"email": "late@example.com"}
+    )
+    assert latecomer.status_code == 200
     owner = User(email="owner@example.com", status="active")
     db_session.add(owner)
     db_session.commit()
     swap = client.post(
-        "/account/email/send-code",
-        headers=headers,
-        json={"email": "owner@example.com"},
+        "/account/email/bind", headers=late_headers, json={"email": "owner@example.com"}
     )
     assert swap.status_code == 409
 

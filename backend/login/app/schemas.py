@@ -192,7 +192,6 @@ class AccountSetupRequest(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=64)
     password: str | None = Field(default=None, min_length=8, max_length=128)
     email: EmailStr | None = None
-    email_code: str | None = Field(default=None, min_length=4, max_length=12)
     contact_phone: str | None = Field(default=None, max_length=32)
     identifier: str | None = Field(default=None, max_length=255)
     existing_password: str | None = Field(default=None, min_length=1, max_length=128)
@@ -247,18 +246,10 @@ class AccountProfileResponse(BaseModel):
     identities: list[AccountIdentityItem]
 
 
-class AccountEmailCodeRequest(BaseModel):
-    """Send a bind-purpose verification code to an email."""
-
-    email: EmailStr
-    captcha_verify_param: str | None = Field(default=None, max_length=8192)
-
-
 class AccountEmailBindRequest(BaseModel):
-    """Bind a verified email to the current account."""
+    """Bind an email to the current account (format-checked only)."""
 
     email: EmailStr
-    code: str = Field(min_length=4, max_length=12)
 
 
 class AccountCredentialsRequest(BaseModel):
