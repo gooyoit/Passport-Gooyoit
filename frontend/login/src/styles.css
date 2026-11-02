@@ -270,6 +270,31 @@ button, input, a { font: inherit; }
   margin-top: 0;
 }
 
+.captcha-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.captcha-actions > button {
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 16px;
+  }
+
+  .modal-card {
+    padding: 24px 18px;
+    gap: 16px;
+  }
+
+  .captcha-img {
+    width: 108px;
+  }
+}
+
 /* ── code row (verification code + send button) ──────── */
 
 .code-row {

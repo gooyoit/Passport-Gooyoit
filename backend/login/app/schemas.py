@@ -46,13 +46,13 @@ class EmailPasswordLoginRequest(BaseModel):
 
 
 def _normalize_phone(value: str) -> str:
-    """Canonicalize to one bucket per handset: strip separators and the +86 prefix."""
+    """Canonicalize CN mobile numbers to one bucket per handset: strip separators and the +86 prefix."""
     digits = re.sub(r"[\s()-]", "", value)
     if digits.startswith("+86"):
         digits = digits[3:]
     elif digits.startswith("86") and len(digits) == 13:
         digits = digits[2:]
-    if not re.fullmatch(r"(\+?[0-9]{5,20})", digits):
+    if not re.fullmatch(r"1[3-9]\d{9}", digits):
         raise ValueError("Invalid phone number")
     return digits
 

@@ -13,6 +13,16 @@ type SmsPurpose = "login" | "register" | "reset_password";
 type View = "login" | "register" | "forgot";
 type Tab = "sms" | "password";
 
+const CN_MOBILE_RE = /^1[3-9]\d{9}$/;
+
+function normalizeCnPhone(value: string): string {
+  const digits = value
+    .replace(/[\s()-]/g, "")
+    .replace(/^\+86/, "")
+    .replace(/^86(?=1[3-9]\d{9}$)/, "");
+  return CN_MOBILE_RE.test(digits) ? digits : "";
+}
+
 export default function LoginPage() {
   const { t } = useTranslation();
   const oauth = useOAuthParams();
@@ -29,6 +39,7 @@ export default function LoginPage() {
   const [codeSent, setCodeSent] = useState(false);
   const [msg, setMsg] = useState("");
   const [codeMsg, setCodeMsg] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
   const [codePurpose, setCodePurpose] = useState<SmsPurpose>("login");
@@ -99,7 +110,11 @@ export default function LoginPage() {
 
   async function requestCode(e: React.MouseEvent, purpose: SmsPurpose) {
     e.preventDefault();
-    if (cooldown > 0 || !phone) return;
+    if (cooldown > 0) return;
+    if (!normalizeCnPhone(phone)) {
+      setPhoneError(t("login.phoneInvalid"));
+      return;
+    }
     setCodePurpose(purpose);
     await fetchCaptcha();
     setShowCaptchaModal(true);
@@ -317,6 +332,26 @@ export default function LoginPage() {
     </>
   );
 
+  const phoneField = (
+    <label className="field">
+      <span>{t("login.phone")}</span>
+      <input
+        type="tel"
+        value={phone}
+        onChange={(e) => {
+          setPhone(e.target.value);
+          if (phoneError) setPhoneError("");
+        }}
+        placeholder={t("login.phonePlaceholder")}
+        autoComplete="tel"
+        inputMode="tel"
+        maxLength={20}
+        required
+      />
+      {phoneError && <span className="field-msg">{phoneError}</span>}
+    </label>
+  );
+
   const smsCodeField = (purpose: SmsPurpose) => (
     <label className="field">
       <span>{t("login.code")}</span>
@@ -397,17 +432,7 @@ export default function LoginPage() {
               <form className="email-form" onSubmit={login}>
                   {mode === "sms" ? (
                     <>
-                      <label className="field">
-                        <span>{t("login.phone")}</span>
-                        <input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder={t("login.phonePlaceholder")}
-                          autoComplete="tel"
-                          required
-                        />
-                      </label>
+                      {phoneField}
                       {smsCodeField("login")}
                     </>
                   ) : (
@@ -487,17 +512,7 @@ export default function LoginPage() {
 
           {view === "register" && (
             <form className="email-form" onSubmit={register}>
-              <label className="field">
-                <span>{t("login.phone")}</span>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder={t("login.phonePlaceholder")}
-                  autoComplete="tel"
-                  required
-                />
-              </label>
+              {phoneField}
               {smsCodeField("register")}
               <button type="submit" className="primary-btn" disabled={loading || code.length < 4}>
                 {loading ? t("login.logging") : t("login.registerSubmit")}
@@ -507,17 +522,7 @@ export default function LoginPage() {
 
           {view === "forgot" && (
             <form className="email-form" onSubmit={resetPassword}>
-              <label className="field">
-                <span>{t("login.phone")}</span>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder={t("login.phonePlaceholder")}
-                  autoComplete="tel"
-                  required
-                />
-              </label>
+              {phoneField}
               {smsCodeField("reset_password")}
               <label className="field">
                 <span>{t("login.newPassword")}</span>
@@ -596,9 +601,9 @@ export default function LoginPage() {
               <input type="text" value={captchaAnswer} onChange={(e) => setCaptchaAnswer(e.target.value)} placeholder={t("login.captchaPlaceholder")} maxLength={4} />
             </div>
             {captchaError && <p className="msg" style={{ margin: 0 }}>{captchaError}</p>}
-            <div className="flex w-full gap-2.5">
-              <button type="button" className="text-btn" onClick={() => setShowCaptchaModal(false)} style={{ flex: 1 }}>{t("login.captchaCancel")}</button>
-              <button type="button" className="primary-btn" disabled={loading || !captchaAnswer} onClick={submitCaptcha} style={{ flex: 1 }}>
+            <div className="captcha-actions">
+              <button type="button" className="text-btn" onClick={() => setShowCaptchaModal(false)}>{t("login.captchaCancel")}</button>
+              <button type="button" className="primary-btn" disabled={loading || !captchaAnswer} onClick={submitCaptcha}>
                 {loading ? "..." : t("login.captchaConfirm")}
               </button>
             </div>

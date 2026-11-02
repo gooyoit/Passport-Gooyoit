@@ -37,6 +37,7 @@
     "tabPassword": "Password",
     "phone": "Phone number",
     "phonePlaceholder": "Enter your phone number",
+    "phoneInvalid": "Enter a valid 11-digit mobile number",
     "registerTitle": "Sign up for {{appName}}",
     "registerDesc": "Register with a verification code; set a password later in Account Center",
     "registerSubmit": "Sign up and sign in",

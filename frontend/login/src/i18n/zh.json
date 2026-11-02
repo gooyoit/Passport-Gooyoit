@@ -37,6 +37,7 @@
     "tabPassword": "密码登录",
     "phone": "手机号",
     "phonePlaceholder": "请输入手机号",
+    "phoneInvalid": "请输入正确的 11 位手机号",
     "registerTitle": "注册 {{appName}}",
     "registerDesc": "使用手机号验证码注册，注册后可在账号中心设置密码",
     "registerSubmit": "注册并登录",
