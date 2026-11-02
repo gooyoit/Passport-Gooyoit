@@ -512,3 +512,213 @@ def test_link_existing_locks_out_brute_force(
         json={"identifier": "alice", "password": "OldPass1!"},
     )
     assert locked.status_code == 429
+
+
+def _phone_owner(db_session: Session, phone: str, username: str) -> User:
+    """Insert the account an SMS login would have created for this phone."""
+    owner = User(
+        username=username,
+        phone=phone,
+        phone_verified_at=func.now(),
+        hashed_password=None,
+        status="active",
+    )
+    db_session.add(owner)
+    db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=owner.id,
+            provider="phone",
+            provider_user_id=phone,
+            raw_profile={},
+        )
+    )
+    db_session.commit()
+    return owner
+
+
+def test_phone_bind_happy_path_enables_phone_login(
+    client: TestClient, db_session: Session, sms_sender
+) -> None:
+    """Binding a free phone attaches the credential and enables phone login."""
+    user = _wechat_skip_user(db_session)
+    application = create_test_application(db_session, login_methods=["sms_code", "email_password"])
+    headers, _ = _bearer(db_session, user)
+
+    requested = client.post(
+        "/account/phone/request-code",
+        headers=headers,
+        json={"phone": "13800138000", "captcha_verify_param": "test-captcha-token"},
+    )
+    assert requested.status_code == 200, requested.text
+    assert requested.json()["sent"] is True
+    debug_code = requested.json()["debug_code"]
+    assert debug_code
+
+    bound = client.post(
+        "/account/phone/bind",
+        headers=headers,
+        json={"phone": "13800138000", "code": debug_code},
+    )
+    assert bound.status_code == 200, bound.text
+    payload = bound.json()
+    assert payload["access_token"] is None  # no merge happened
+    assert {"provider": "phone", "provider_email": None} in payload["profile"]["identities"]
+
+    login = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "identifier": "13800138000",
+            "password": "whatever-does-not-matter",
+        },
+    )
+    # The account has no password yet, but the identifier must resolve —
+    # a wrong-password 401 (not 404-style rejection) proves phone resolution.
+    assert login.status_code == 401
+
+    # Re-binding the same phone is idempotent.
+    again_code = client.post(
+        "/account/phone/request-code",
+        headers=headers,
+        json={"phone": "138 0013 8000", "captcha_verify_param": "t"},
+    ).json()["debug_code"]
+    again = client.post(
+        "/account/phone/bind",
+        headers=headers,
+        json={"phone": "+8613800138000", "code": again_code},
+    )
+    assert again.status_code == 200
+    assert again.json()["access_token"] is None
+
+
+def test_phone_bind_merges_wechat_account_into_phone_owner(
+    client: TestClient, db_session: Session, sms_sender
+) -> None:
+    """A phone owned by another account claims the caller via merge."""
+    from app.models import ApplicationUser
+
+    bare = _wechat_skip_user(db_session)
+    application = create_test_application(db_session)
+    db_session.add(
+        ApplicationUser(
+            application_id=application["id"], user_id=bare.id, status="active", joined_at=func.now()
+        )
+    )
+    db_session.commit()
+    owner = _phone_owner(db_session, "13900139000", "phone_owner")
+    headers, _ = _bearer(db_session, bare)
+
+    code = client.post(
+        "/account/phone/request-code",
+        headers=headers,
+        json={"phone": "13900139000", "captcha_verify_param": "t"},
+    ).json()["debug_code"]
+    merged = client.post(
+        "/account/phone/bind",
+        headers=headers,
+        json={"phone": "13900139000", "code": code},
+    )
+    assert merged.status_code == 200, merged.text
+    payload = merged.json()
+    assert payload["access_token"]  # fresh token for the surviving account
+    assert payload["profile"]["user"]["id"] == owner.id
+    providers = sorted(
+        i["provider"]
+        for i in payload["profile"]["identities"]
+    )
+    assert providers == ["phone", "wechat"]
+
+    db_session.expire_all()
+    assert db_session.get(User, bare.id) is None
+    # The fresh token resolves to the surviving account.
+    userinfo = client.get(
+        "/oauth/userinfo", headers={"Authorization": f"Bearer {payload['access_token']}"}
+    )
+    assert userinfo.status_code == 200
+    assert userinfo.json()["user"]["id"] == owner.id
+    membership = db_session.scalar(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application["id"],
+            ApplicationUser.user_id == owner.id,
+        )
+    )
+    assert membership is not None
+
+
+def test_phone_bind_merges_via_sso_cookie_rotates_session(
+    client: TestClient, db_session: Session, sms_sender
+) -> None:
+    """The cookie path swaps the SSO session onto the phone's account."""
+    bare = _wechat_skip_user(db_session)
+    owner = _phone_owner(db_session, "13700137000", "cookie_owner")
+    client.cookies.set("passport_sso", create_sso_session(db_session, user_id=bare.id))
+
+    code = client.post(
+        "/account/phone/request-code",
+        json={"phone": "13700137000", "captcha_verify_param": "t"},
+    ).json()["debug_code"]
+    merged = client.post(
+        "/account/phone/bind",
+        json={"phone": "13700137000", "code": code},
+    )
+    assert merged.status_code == 200
+    assert merged.json()["access_token"] is None
+    assert merged.json()["profile"]["user"]["id"] == owner.id
+
+    profile = client.get("/account/profile")
+    assert profile.status_code == 200
+    assert profile.json()["user"]["id"] == owner.id
+    client.cookies.delete("passport_sso")
+
+
+def test_phone_bind_cookie_path_rejects_bad_captcha(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """The anonymous-facing cookie path fails closed on a bad captcha."""
+    from app.api import account as account_api
+
+    user = _wechat_skip_user(db_session)
+    client.cookies.set("passport_sso", create_sso_session(db_session, user_id=user.id))
+    monkeypatch.setattr(account_api, "verify_captcha", lambda param: False)
+
+    rejected = client.post(
+        "/account/phone/request-code",
+        json={"phone": "13600136000", "captcha_verify_param": "bad"},
+    )
+    assert rejected.status_code == 400
+    client.cookies.delete("passport_sso")
+
+
+def test_phone_bind_wrong_code_locks_out(
+    client: TestClient, db_session: Session, sms_sender, monkeypatch
+) -> None:
+    """Repeated wrong SMS codes trigger the brute-force lockout."""
+    from app.api import account as account_api
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_api, "get_redis_client", lambda: redis)
+
+    user = _wechat_skip_user(db_session)
+    headers, _ = _bearer(db_session, user)
+    client.post(
+        "/account/phone/request-code",
+        headers=headers,
+        json={"phone": "13500135000", "captcha_verify_param": "t"},
+    )
+
+    for _ in range(5):
+        wrong = client.post(
+            "/account/phone/bind",
+            headers=headers,
+            json={"phone": "13500135000", "code": "000000"},
+        )
+        assert wrong.status_code == 400
+
+    locked = client.post(
+        "/account/phone/bind",
+        headers=headers,
+        json={"phone": "13500135000", "code": "000000"},
+    )
+    assert locked.status_code == 429

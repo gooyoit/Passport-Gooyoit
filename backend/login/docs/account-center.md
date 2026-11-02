@@ -1,6 +1,6 @@
 # 账号补全（Account Center）接入指南
 
-面向接入 Passport 的业务系统开发者。当用户通过第三方登录（微信等）首次进入业务系统、且跳过了账号完善步骤时，业务系统可以通过本套接口检测并帮助用户补绑邮箱 / 设置密码，让用户后续也能用「用户名或邮箱 + 密码」登录。
+面向接入 Passport 的业务系统开发者。当用户通过第三方登录（微信等）首次进入业务系统、且跳过了账号完善步骤时，业务系统可以通过本套接口检测并帮助用户补绑手机号 / 邮箱 / 设置密码，让用户后续也能用「手机号验证码」或「用户名或邮箱 + 密码」登录；微信绑定入口同样在这里。
 
 配置与账号体系说明参见根目录 `INTEGRATION.md`；第三方登录配置参见 `oauth-providers.md`。
 
@@ -37,7 +37,7 @@ curl -H "Authorization: Bearer <access_token>" \
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `has_password` | bool | 用户是否设置了密码 |
-| `identities` | array | 已绑定的登录凭证。`provider` 取值 `wechat` / `google` / `github` / `email`；`provider_email` 为该凭证关联的邮箱（可能为 null） |
+| `identities` | array | 已绑定的登录凭证。`provider` 取值 `wechat` / `google` / `github` / `email` / `phone`；`provider_email` 为该凭证关联的邮箱（可能为 null） |
 
 **推荐检测逻辑**（伪码）：
 
@@ -140,6 +140,61 @@ curl -X POST -H "Authorization: Bearer <access_token>" \
 - 下次微信扫码将直接以已有账号身份登录。
 
 错误：`400` 两个账号已关联；`401` 密码错误或邮箱未验证；`403` 目标账号被禁用；`409` 不可合并。
+
+### 绑定手机号（登录凭证）`POST /account/phone/request-code` → `POST /account/phone/bind`
+
+手机号是 Passport 账号的**主身份锚点**：短信验证码验证所有权后即成为可登录的凭证（登录页手机号验证码登录），与 `credentials.contact_phone`（纯资料字段、不验证、不可登录）是两回事。
+
+**第 1 步：发验证码 `POST /account/phone/request-code`**
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `phone` | 是 | 大陆手机号，自动归一化（容忍空格/连字符/+86 前缀） |
+| `captcha_verify_param` | 是 | 阿里云验证码 2.0 回参；**Bearer 调用免验证**（2 小时 token 即新鲜身份证明），cookie 路径（账号中心页）必须携带 |
+
+```bash
+curl -X POST -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "13800138000"}' \
+  https://passport.gooyoit.com/api/account/phone/request-code
+```
+
+返回 `{ "sent": true }`（debug 模式额外带 `debug_code`）。错误：`400` 验证码校验失败（cookie 路径）；`429` 触发短信频率限制（含 `Retry-After`）。
+
+**第 2 步：验证并绑定 `POST /account/phone/bind`**
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `phone` | 是 | 同上 |
+| `code` | 是 | 6 位短信验证码（有效期见短信文案；连续错 5 次该码作废并触发临时锁定） |
+
+行为分支：
+
+- **手机号未被占用** → 绑定为登录凭证（`identities` 增加 `provider: "phone"`），返回最新 profile。重复绑同一手机号幂等成功。
+- **手机号已被其他账号占用** → **验证码即所有权证明，自动合并**：当前账号并入手机号所属账号（identity、应用成员关系迁移；email/username 等字段空位互补，双方非空且不同则 `409`）。响应为 `AccountLinkResponse`，语义同 `link-existing`：
+  - **Bearer 调用方必须拿响应里的新 `access_token` 替换旧 token**（旧 token 随被并入的账号删除失效）；
+  - 账号中心 cookie 路径由 Passport 自动轮换 SSO 会话，用户无感。
+- 错误码：`400` 验证码错误；`401` 同上（重试锁定）；`409` 合并冲突；`429` 触发锁定（含 `Retry-After`）。
+
+**绑定成功后**，用户即可在登录页用「手机号 + 验证码」登录。
+
+### 绑定微信（仅 Passport 账号中心页支持）
+
+微信绑定依赖浏览器整页跳转（微信扫码授权 → 302 回跳），业务系统的 Bearer token 无法承载该流程，因此只提供账号中心页入口：
+
+```
+https://passport.gooyoit.com/account/settings
+```
+
+用户在账号中心点「绑定微信」后走 `GET /account/wechat/bind/start` → 微信授权页 → `GET /account/wechat/bind/callback` → 302 回 `/account/settings?bind=ok|conflict|error`：
+
+| 结果 | 含义 |
+|---|---|
+| `ok` | 绑定成功（重复绑定同一微信幂等成功） |
+| `conflict` | 该微信已绑定到**另一个** Passport 账号。Passport **不会自动合并**（微信授权不足以证明它是你的）；引导用户在该账号解绑微信，或用「绑定已有账号」（密码合并）把当前身份并回去 |
+| `error` | 会话过期（超过 10 分钟）或微信授权失败，请重试 |
+
+业务系统如需引导用户绑微信，放一个指向账号中心页的链接即可，无需调用 API。
 
 ### 设置用户名 / 密码 / 手机号 `POST /account/credentials`
 

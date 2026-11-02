@@ -55,7 +55,7 @@ class SmsCodeRequest(BaseModel):
     client_id: str
     phone: str
     captcha_verify_param: str = Field(min_length=1, max_length=8192)
-    purpose: str = Field(default="login", pattern="^(login|register|reset_password)$")
+    purpose: str = Field(default="login", pattern="^(login|register|reset_password|bind_phone)$")
 
     @field_validator("phone")
     @classmethod
@@ -192,6 +192,8 @@ class AccountSetupRequest(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=64)
     password: str | None = Field(default=None, min_length=8, max_length=128)
     email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=32)
+    code: str | None = Field(default=None, min_length=4, max_length=12)
     contact_phone: str | None = Field(default=None, max_length=32)
     identifier: str | None = Field(default=None, max_length=255)
     existing_password: str | None = Field(default=None, min_length=1, max_length=128)
@@ -205,6 +207,11 @@ class AccountSetupRequest(BaseModel):
     @classmethod
     def validate_optional_password(cls, value: str | None) -> str | None:
         return _password_complexity(value) if value else None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        return _normalize_phone(value) if value else None
 
     @field_validator("contact_phone")
     @classmethod
@@ -274,6 +281,30 @@ class AccountCredentialsRequest(BaseModel):
     @classmethod
     def validate_contact_phone(cls, value: str | None) -> str | None:
         return _normalize_contact_phone(value)
+
+
+class AccountPhoneCodeRequest(BaseModel):
+    """Request an SMS code to bind a phone as a login credential."""
+
+    phone: str
+    captcha_verify_param: str = Field(min_length=1, max_length=8192)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
+
+
+class AccountPhoneBindRequest(BaseModel):
+    """Verify the SMS code and attach the phone to the current account."""
+
+    phone: str
+    code: str = Field(min_length=4, max_length=12)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        return _normalize_phone(value)
 
 
 class AccountLinkRequest(BaseModel):

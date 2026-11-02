@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.schemas import AccountSetupRequest
 from app.services import account_setup
 
-from conftest import FakeRedis, create_test_application
+from conftest import FakeRedis, create_test_application, request_sms_code
 
 
 def _pending_wechat_token(db_session: Session, *, enable_public_users: bool) -> tuple[dict, str]:
@@ -294,3 +294,191 @@ def test_password_login_lockout_survives_identifier_variants(
         },
     )
     assert locked.status_code == 429
+
+
+def _phone_owner(db_session: Session, phone: str, username: str):
+    """Create an account that already owns a verified phone credential."""
+    from sqlalchemy import func
+
+    from app.models import User, UserIdentity
+
+    owner = User(
+        username=username,
+        phone=phone,
+        phone_verified_at=func.now(),
+        status="active",
+    )
+    db_session.add(owner)
+    db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=owner.id,
+            provider="phone",
+            provider_user_id=phone,
+            raw_profile={},
+        )
+    )
+    db_session.commit()
+    return owner
+
+
+def test_wechat_new_mode_with_phone_creates_verified_account(
+    client: TestClient, db_session: Session, monkeypatch, sms_sender
+) -> None:
+    """Completing setup with phone+code builds an account with a verified phone."""
+    from sqlalchemy import select
+
+    from app.models import User, UserIdentity
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
+    application, context = _pending_wechat_token(db_session, enable_public_users=True)
+    token = account_setup.create_pending_account_setup(context)
+    code = request_sms_code(
+        client, application["client_id"], "13800138000", purpose="bind_phone"
+    )["debug_code"]
+
+    response = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "phone": "13800138000",
+            "code": code,
+            "username": "phone_user",
+            "password": "StrongPass1!",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["redirect_uri"].startswith("https://crm.example.com/callback?code=")
+    db_session.expire_all()
+    user = db_session.scalar(select(User).where(User.phone == "13800138000"))
+    assert user is not None
+    assert user.phone_verified_at is not None
+    providers = sorted(
+        db_session.scalars(
+            select(UserIdentity.provider).where(UserIdentity.user_id == user.id)
+        ).all()
+    )
+    assert providers == ["phone", "wechat"]
+
+    login = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "identifier": "13800138000",
+            "password": "StrongPass1!",
+        },
+    )
+    assert login.status_code == 200
+    assert "code" in login.json()
+
+
+def test_wechat_new_mode_with_owned_phone_merges_into_phone_account(
+    client: TestClient, db_session: Session, monkeypatch, sms_sender
+) -> None:
+    """The SMS code proves phone ownership: pending identity joins that account."""
+    from sqlalchemy import select
+
+    from app.core.security import hash_password
+    from app.models import ApplicationUser, User, UserIdentity
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
+    application, context = _pending_wechat_token(db_session, enable_public_users=True)
+    owner = _phone_owner(db_session, "13900139000", "owner")
+    owner.hashed_password = hash_password("OwnerPass1!")
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+    code = request_sms_code(
+        client, application["client_id"], "13900139000", purpose="bind_phone"
+    )["debug_code"]
+
+    response = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "phone": "13900139000",
+            "code": code,
+            "username": "ignored_name",
+            "password": "IgnoredPass1!",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    db_session.expire_all()
+    # The wechat identity joined the phone's account; no fork account was made.
+    assert (
+        db_session.query(UserIdentity)
+        .filter_by(user_id=owner.id, provider="wechat")
+        .count()
+        == 1
+    )
+    assert db_session.scalar(select(User).where(User.username == "ignored_name")) is None
+    membership = db_session.scalar(
+        select(ApplicationUser).where(
+            ApplicationUser.application_id == application["id"],
+            ApplicationUser.user_id == owner.id,
+        )
+    )
+    assert membership is not None
+    # Optional password was ignored: the owner's own one still works.
+    login = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "identifier": "owner",
+            "password": "OwnerPass1!",
+        },
+    )
+    assert login.status_code == 200
+
+
+def test_wechat_new_mode_with_phone_rejects_owner_already_on_wechat(
+    client: TestClient, db_session: Session, monkeypatch, sms_sender
+) -> None:
+    """A phone account that already uses wechat means: go log in, 409."""
+    from app.models import UserIdentity
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
+    application, context = _pending_wechat_token(db_session, enable_public_users=True)
+    owner = _phone_owner(db_session, "13900139000", "owner")
+    db_session.add(
+        UserIdentity(
+            user_id=owner.id,
+            provider="wechat",
+            provider_user_id="union-id-other",
+            raw_profile={},
+        )
+    )
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+    code = request_sms_code(
+        client, application["client_id"], "13900139000", purpose="bind_phone"
+    )["debug_code"]
+
+    response = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "phone": "13900139000",
+            "code": code,
+        },
+    )
+
+    assert response.status_code == 409
+    db_session.expire_all()
+    # The original wechat identity is untouched; nothing new was attached.
+    identities = (
+        db_session.query(UserIdentity)
+        .filter_by(user_id=owner.id, provider="wechat")
+        .all()
+    )
+    assert len(identities) == 1
+    assert identities[0].provider_user_id == "union-id-other"

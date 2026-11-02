@@ -133,6 +133,7 @@ def _local_only_redis(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(auth_api, "get_redis_client", lambda: None)
     monkeypatch.setattr(account_api, "get_redis_client", lambda: None)
     monkeypatch.setattr(auth_api, "verify_captcha", lambda param: True)
+    monkeypatch.setattr(account_api, "verify_captcha", lambda param: True)
 
 
 @pytest.fixture()

@@ -5,23 +5,13 @@ import { FaWeixin } from "react-icons/fa";
 import Showcase from "../components/Showcase";
 import GoogleIcon from "../components/GoogleIcon";
 import OtpInput from "../components/OtpInput";
-import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode } from "../lib/utils";
+import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode, normalizeCnPhone } from "../lib/utils";
 import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type FormEvent = React.FormEvent;
 type SmsPurpose = "login" | "register" | "reset_password";
 type View = "login" | "register" | "forgot";
 type Tab = "sms" | "password";
-
-const CN_MOBILE_RE = /^1[3-9]\d{9}$/;
-
-function normalizeCnPhone(value: string): string {
-  const digits = value
-    .replace(/[\s()-]/g, "")
-    .replace(/^\+86/, "")
-    .replace(/^86(?=1[3-9]\d{9}$)/, "");
-  return CN_MOBILE_RE.test(digits) ? digits : "";
-}
 
 export default function LoginPage() {
   const { t } = useTranslation();

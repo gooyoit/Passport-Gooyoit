@@ -16,9 +16,10 @@ from app.core.redis import get_redis_client
 from app.core.security import hash_password, utcnow, verify_password
 from app.models import User, UserIdentity, UserStatus
 from app.schemas import AccountSetupRequest
-from app.services.account import find_local_user
+from app.services.account import find_local_user, find_user_by_phone
 from app.services.applications import get_active_application_by_client_id
 from app.services.auth import (
+    _consume_sms_code,
     _set_sso_cookie_if_enabled,
     create_authorization_code,
     ensure_application_user,
@@ -119,57 +120,114 @@ def complete_account_setup(
             if payload.mode == "new" and payload.email
             else None
         )
+        phone = payload.phone if payload.mode == "new" else None
         user = None
-        if email:
-            existing_by_email = db.scalar(select(User).where(func.lower(User.email) == email))
-            if existing_by_email is not None:
-                # No proof of email ownership at this entry point (no emailed code
-                # anymore), so never attach the pending identity to that user.
+        if phone:
+            # Phone-first branch: the SMS code proves ownership of the phone,
+            # making it a verified login credential — and the merge key when
+            # the phone already belongs to an account.
+            if bool(username) != bool(payload.password):
+                raise HTTPException(status_code=400, detail="Username and password must be set together")
+            if username and db.scalar(
+                select(User.id).where(func.lower(User.username) == username)
+            ):
+                raise HTTPException(status_code=409, detail="Username is already in use")
+            if not payload.code:
                 raise HTTPException(
-                    status_code=409,
-                    detail="Email is already bound to another account",
+                    status_code=400,
+                    detail="SMS verification code is required to bind a phone",
                 )
-
-        if payload.mode == "new" and bool(username) != bool(payload.password):
-            raise HTTPException(status_code=400, detail="Username and password must be set together")
-        if username and db.scalar(
-            select(User.id).where(func.lower(User.username) == username)
-        ):
-            raise HTTPException(status_code=409, detail="Username is already in use")
-        user = User(
-            username=username,
-            email=email,
-            contact_phone=payload.contact_phone if payload.mode == "new" else None,
-            display_name=pending.get("display_name") or username or "Passport User",
-            avatar_url=pending.get("avatar_url"),
-            hashed_password=(
-                hash_password(payload.password)
-                if payload.mode == "new" and payload.password
-                else None
-            ),
-            status=UserStatus.ACTIVE,
-        )
-        db.add(user)
-        db.flush()
-        if email:
-            email_identity = db.scalar(
-                select(UserIdentity).where(
-                    UserIdentity.provider == "email",
-                    UserIdentity.provider_user_id == email,
+            _consume_sms_code(db, phone=phone, code=payload.code, purpose="bind_phone")
+            owner = find_user_by_phone(db, phone=phone)
+            if owner is not None:
+                if owner.status != UserStatus.ACTIVE:
+                    raise HTTPException(status_code=403, detail="User is disabled")
+                if db.scalar(
+                    select(UserIdentity.id).where(
+                        UserIdentity.user_id == owner.id,
+                        UserIdentity.provider == pending["provider"],
+                    )
+                ) is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="That account already uses this login method; log in instead",
+                    )
+                # Optional username/password are ignored on merge — the phone
+                # account keeps whatever credentials it already has.
+                user = owner
+            else:
+                user = User(
+                    username=username,
+                    phone=phone,
+                    phone_verified_at=utcnow(),
+                    contact_phone=payload.contact_phone,
+                    display_name=pending.get("display_name") or username or "Passport User",
+                    avatar_url=pending.get("avatar_url"),
+                    hashed_password=(
+                        hash_password(payload.password) if payload.password else None
+                    ),
+                    status=UserStatus.ACTIVE,
                 )
-            )
-            if email_identity is None:
+                db.add(user)
+                db.flush()
                 db.add(
                     UserIdentity(
                         user_id=user.id,
-                        provider="email",
-                        provider_user_id=email,
-                        provider_email=email,
+                        provider="phone",
+                        provider_user_id=phone,
                         raw_profile={},
                     )
                 )
-            elif email_identity.user_id != user.id:
-                raise HTTPException(status_code=409, detail="Email identity belongs to another account")
+        else:
+            if email:
+                existing_by_email = db.scalar(select(User).where(func.lower(User.email) == email))
+                if existing_by_email is not None:
+                    # No proof of email ownership at this entry point (no emailed code
+                    # anymore), so never attach the pending identity to that user.
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Email is already bound to another account",
+                    )
+            if payload.mode == "new" and bool(username) != bool(payload.password):
+                raise HTTPException(status_code=400, detail="Username and password must be set together")
+            if username and db.scalar(
+                select(User.id).where(func.lower(User.username) == username)
+            ):
+                raise HTTPException(status_code=409, detail="Username is already in use")
+            user = User(
+                username=username,
+                email=email,
+                contact_phone=payload.contact_phone if payload.mode == "new" else None,
+                display_name=pending.get("display_name") or username or "Passport User",
+                avatar_url=pending.get("avatar_url"),
+                hashed_password=(
+                    hash_password(payload.password)
+                    if payload.mode == "new" and payload.password
+                    else None
+                ),
+                status=UserStatus.ACTIVE,
+            )
+            db.add(user)
+            db.flush()
+            if email:
+                email_identity = db.scalar(
+                    select(UserIdentity).where(
+                        UserIdentity.provider == "email",
+                        UserIdentity.provider_user_id == email,
+                    )
+                )
+                if email_identity is None:
+                    db.add(
+                        UserIdentity(
+                            user_id=user.id,
+                            provider="email",
+                            provider_user_id=email,
+                            provider_email=email,
+                            raw_profile={},
+                        )
+                    )
+                elif email_identity.user_id != user.id:
+                    raise HTTPException(status_code=409, detail="Email identity belongs to another account")
 
     if existing_identity is None:
         db.add(

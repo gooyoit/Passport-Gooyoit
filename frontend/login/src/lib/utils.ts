@@ -75,6 +75,16 @@ export function bufferEncode(buffer: ArrayBuffer | Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+const CN_MOBILE_RE = /^1[3-9]\d{9}$/;
+
+export function normalizeCnPhone(value: string): string {
+  const digits = value
+    .replace(/[\s()-]/g, "")
+    .replace(/^\+86/, "")
+    .replace(/^86(?=1[3-9]\d{9}$)/, "");
+  return CN_MOBILE_RE.test(digits) ? digits : "";
+}
+
 export function useOAuthParams() {
   const p = new URLSearchParams(window.location.search);
   return {

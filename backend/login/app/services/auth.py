@@ -81,16 +81,24 @@ def verify_client_secret(db: Session, application: Application, client_secret: s
 
 
 
-def issue_sms_code(db: Session, *, client_id: str, phone: str, purpose: str = "login") -> str:
-    """Create an SMS verification code and send it."""
-    application = get_active_application_by_client_id(db, client_id)
-    if application is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    if not is_login_method_enabled(db, application.id, "sms_code"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SMS code login is disabled",
-        )
+def issue_sms_code(db: Session, *, client_id: str | None, phone: str, purpose: str = "login") -> str:
+    """Create an SMS verification code and send it.
+
+    bind_phone skips application checks entirely: it is issued from the
+    account center where merging into the phone's existing owner is the
+    intended outcome, so neither the sms_code login method nor signup
+    switches apply.
+    """
+    application = None
+    if purpose != "bind_phone":
+        application = get_active_application_by_client_id(db, client_id)
+        if application is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+        if not is_login_method_enabled(db, application.id, "sms_code"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SMS code login is disabled",
+            )
     if purpose == "register" and not application.enable_public_users:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

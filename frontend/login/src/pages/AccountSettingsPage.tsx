@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type FormEvent } from "react";
+import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle2,
@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import { FaWeixin } from "react-icons/fa";
 import GoogleIcon from "../components/GoogleIcon";
-import { api } from "../lib/utils";
+import OtpInput from "../components/OtpInput";
+import { api, API_BASE, normalizeCnPhone } from "../lib/utils";
+import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type Identity = { provider: string; provider_email: string | null };
 
@@ -31,7 +33,7 @@ type Profile = {
   identities: Identity[];
 };
 
-type Section = "email" | "credentials" | "phone" | null;
+type Section = "email" | "credentials" | "phoneBind" | null;
 
 function ProviderIcon({ provider }: { provider: string }) {
   const cls = provider === "wechat" ? "credential-icon wechat" : "credential-icon";
@@ -39,6 +41,7 @@ function ProviderIcon({ provider }: { provider: string }) {
   if (provider === "google") return <div className={cls}><GoogleIcon size={18} /></div>;
   if (provider === "github") return <div className={cls}><GithubIcon size={18} /></div>;
   if (provider === "email") return <div className={cls}><Mail size={18} /></div>;
+  if (provider === "phone") return <div className={cls}><Smartphone size={18} /></div>;
   return <div className={cls}><UserCircle2 size={18} /></div>;
 }
 
@@ -65,7 +68,13 @@ export default function AccountSettingsPage() {
   const [password, setPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [phone, setPhone] = useState("");
+  const [bindPhone, setBindPhone] = useState("");
+  const [bindCode, setBindCode] = useState("");
+  const [bindCodeSent, setBindCodeSent] = useState(false);
+  const [bindCodeMsg, setBindCodeMsg] = useState("");
+  const [bindCooldown, setBindCooldown] = useState(0);
+  const bindPhoneRef = useRef(bindPhone);
+  bindPhoneRef.current = bindPhone;
 
   useEffect(() => {
     api<Profile>("/account/profile")
@@ -73,13 +82,67 @@ export default function AccountSettingsPage() {
         setProfile(data);
         setAuthState("ready");
         setUsername(data.user.username ?? "");
-        setPhone(data.user.contact_phone ?? "");
       })
       .catch(() => setAuthState("guest"));
   }, []);
 
-  function update(key: "username" | "password" | "currentPassword" | "phone") {
-    const setters = { username: setUsername, password: setPassword, currentPassword: setCurrentPassword, phone: setPhone };
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("bind");
+    if (!result) return;
+    if (result === "ok") setMessage(t("accountSettings.wechatBindOk"));
+    else if (result === "conflict") setMessage(t("accountSettings.wechatBindConflict"));
+    else setMessage(t("accountSettings.wechatBindError"));
+    window.history.replaceState(null, "", "/account/settings");
+  }, [t]);
+
+  useEffect(() => {
+    if (bindCooldown <= 0) return;
+    const timer = setTimeout(() => setBindCooldown(bindCooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [bindCooldown]);
+
+  async function handlePhoneCaptchaVerify(captchaVerifyParam: string) {
+    const phoneValue = normalizeCnPhone(bindPhoneRef.current);
+    if (!phoneValue) {
+      setBindCodeMsg(t("login.phoneInvalid"));
+      return { captchaResult: true, bizResult: false };
+    }
+    try {
+      await api<{ sent: boolean }>("/account/phone/request-code", {
+        method: "POST",
+        body: JSON.stringify({ phone: phoneValue, captcha_verify_param: captchaVerifyParam }),
+      });
+      setBindCodeSent(true);
+      setBindCodeMsg("");
+      setBindCooldown(60);
+      return { captchaResult: true, bizResult: true };
+    } catch (error) {
+      const m = (error as Error).message;
+      if (m.includes("Captcha verification failed")) {
+        return { captchaResult: false, bizResult: false };
+      }
+      setBindCodeMsg(m.includes("rate limit") || m.includes("Too Many") ? t("login.tooFrequent") : m);
+      return { captchaResult: true, bizResult: false };
+    }
+  }
+
+  const captcha = useAliyunCaptcha(handlePhoneCaptchaVerify);
+
+  function requestBindCode(e: React.MouseEvent) {
+    e.preventDefault();
+    if (bindCooldown > 0) return;
+    if (!normalizeCnPhone(bindPhone)) {
+      setBindCodeMsg(t("login.phoneInvalid"));
+      return;
+    }
+    setBindCodeMsg("");
+    if (!captcha.trigger()) {
+      setBindCodeMsg(t("login.captchaUnavailable"));
+    }
+  }
+
+  function update(key: "username" | "password" | "currentPassword") {
+    const setters = { username: setUsername, password: setPassword, currentPassword: setCurrentPassword };
     return (event: React.ChangeEvent<HTMLInputElement>) => setters[key](event.target.value);
   }
 
@@ -155,17 +218,27 @@ export default function AccountSettingsPage() {
     }
   }
 
-  async function savePhone(event: FormEvent) {
+  async function submitPhoneBind(event: FormEvent) {
     event.preventDefault();
+    const phoneValue = normalizeCnPhone(bindPhone);
+    if (!phoneValue) {
+      setMessage(t("login.phoneInvalid"));
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
-      const updated = await api<Profile>("/account/credentials", {
+      const result = await api<{ profile: Profile; access_token: string | null }>("/account/phone/bind", {
         method: "POST",
-        body: JSON.stringify({ contact_phone: phone || null }),
+        body: JSON.stringify({ phone: phoneValue, code: bindCode.trim() }),
       });
-      setProfile(updated);
+      const merged = profile != null && result.profile.user.id !== profile.user.id;
+      setProfile(result.profile);
       setEditing(null);
+      setBindPhone("");
+      setBindCode("");
+      setBindCodeSent(false);
+      if (merged) setMessage(t("accountSettings.phoneBoundMerged"));
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -198,8 +271,12 @@ export default function AccountSettingsPage() {
     );
   }
 
-  
-  const otherIdentities = profile.identities;
+
+  const hasPhone = profile.identities.some((identity) => identity.provider === "phone");
+  const hasWechat = profile.identities.some((identity) => identity.provider === "wechat");
+  const otherIdentities = profile.identities.filter(
+    (identity) => identity.provider !== "phone" && identity.provider !== "wechat"
+  );
 
   return (
     <main className="settings-page">
@@ -229,6 +306,56 @@ export default function AccountSettingsPage() {
               <span className="status-badge bound">{t("accountSettings.bound")}</span>
             </div>
           ))}
+
+          <div className="credential-row">
+            <ProviderIcon provider="phone" />
+            <div className="credential-label">
+              <strong>{t("accountSettings.phoneCredential")}</strong>
+              <span>{hasPhone ? t("accountSettings.phoneCredentialHintBound") : t("accountSettings.phoneCredentialHintUnbound")}</span>
+            </div>
+            {hasPhone ? (
+              <span className="status-badge bound">{t("accountSettings.bound")}</span>
+            ) : editing === "phoneBind" ? (
+              <span className="status-badge missing">{t("accountSettings.binding")}</span>
+            ) : (
+              <button className="text-btn" onClick={() => { setEditing("phoneBind"); setMessage(""); }}>{t("accountSettings.bindPhone")}</button>
+            )}
+          </div>
+
+          {editing === "phoneBind" && !hasPhone && (
+            <form className="inline-form" onSubmit={submitPhoneBind}>
+              <label className="field">
+                <span>{t("login.phone")}</span>
+                <input type="tel" value={bindPhone} onChange={(e) => setBindPhone(e.target.value)} placeholder={t("login.phonePlaceholder")} autoComplete="tel" inputMode="tel" maxLength={20} required />
+              </label>
+              <label className="field">
+                <span>{t("login.code")}</span>
+                <OtpInput value={bindCode} onChange={setBindCode} />
+                <div className="otp-meta">
+                  <span className="otp-hint">{bindCodeSent ? t("login.noCode") : ""}</span>
+                  <button type="button" className="text-btn send-code-link" onClick={requestBindCode} disabled={busy || !bindPhone || bindCooldown > 0}>
+                    {bindCooldown > 0 ? t("login.resendIn", { seconds: bindCooldown }) : bindCodeSent ? t("login.resend") : t("login.sendCode")}
+                  </button>
+                </div>
+                {bindCodeMsg && <span className="field-msg">{bindCodeMsg}</span>}
+              </label>
+              <p className="field-msg">{t("accountSettings.phoneCredentialHintUnbound")}</p>
+              <button className="primary-btn" type="submit" disabled={busy}>{busy ? t("accountSettings.working") : t("accountSettings.confirmBind")}</button>
+            </form>
+          )}
+
+          <div className="credential-row">
+            <ProviderIcon provider="wechat" />
+            <div className="credential-label">
+              <strong>{t("accountSettings.wechatCredential")}</strong>
+              <span>{hasWechat ? t("accountSettings.wechatBoundHint") : t("accountSettings.wechatBindHint")}</span>
+            </div>
+            {hasWechat ? (
+              <span className="status-badge bound">{t("accountSettings.bound")}</span>
+            ) : (
+              <a className="text-btn" href={`${API_BASE}/account/wechat/bind/start`}>{t("accountSettings.bindWechat")}</a>
+            )}
+          </div>
 
           <div className="credential-row">
             <ProviderIcon provider="email" />
@@ -316,39 +443,22 @@ export default function AccountSettingsPage() {
           )}
         </section>
 
-        <section className="auth-card settings-card">
-          <h2 className="settings-section-title">{t("accountSettings.contact")}</h2>
-          <div className="credential-row">
-            <div className="credential-icon"><Smartphone size={18} /></div>
-            <div className="credential-label">
-              <strong>{t("accountSettings.phone")}</strong>
-              <span>{profile.user.contact_phone || t("accountSettings.phoneHint")}</span>
-            </div>
-            {editing === "phone" ? (
-              <span className="status-badge missing">{t("accountSettings.editing")}</span>
-            ) : (
-              <button className="text-btn" onClick={() => { setEditing("phone"); setMessage(""); }}>
-                {profile.user.contact_phone ? t("accountSettings.edit") : t("accountSettings.add")}
-              </button>
-            )}
-          </div>
-          {editing === "phone" && (
-            <form className="inline-form" onSubmit={savePhone}>
-              <label className="field">
-                <span>{t("accountSettings.phone")}</span>
-                <input type="tel" value={phone} onChange={update("phone")} placeholder="+8613800138000" autoComplete="tel" />
-              </label>
-              <button className="primary-btn" type="submit" disabled={busy}>{busy ? t("accountSettings.working") : t("accountSettings.save")}</button>
-            </form>
-          )}
-        </section>
-
         {message && <p className="msg settings-msg">{message}</p>}
         <p className="settings-footer">
           <CheckCircle2 size={14} /> {t("accountSettings.footer")}
         </p>
         <a className="text-btn settings-signout" href="/api/auth/logout">{t("accountSettings.signOut")}</a>
       </div>
+
+      <div id="aliyun-captcha-element" />
+      <button
+        ref={captcha.triggerRef}
+        id="aliyun-captcha-trigger"
+        type="button"
+        style={{ display: "none" }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </main>
   );
 }

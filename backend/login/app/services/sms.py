@@ -7,7 +7,7 @@ from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
-SMS_PURPOSES = ("login", "register", "reset_password")
+SMS_PURPOSES = ("login", "register", "reset_password", "bind_phone")
 
 
 def _template_for(purpose: str) -> str:
