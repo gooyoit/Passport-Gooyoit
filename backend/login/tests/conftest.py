@@ -126,13 +126,15 @@ def create_test_application(
 
 @pytest.fixture(autouse=True)
 def _local_only_redis(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Skip rate limits, keep captcha in-process, and never send real email."""
+    """Skip rate limits, accept every captcha token, and never send real email."""
     from app.api import account as account_api
     from app.api import auth as auth_api
     from app.services import auth as auth_service
 
     monkeypatch.setattr(auth_api, "get_redis_client", lambda: None)
     monkeypatch.setattr(account_api, "get_redis_client", lambda: None)
+    monkeypatch.setattr(auth_api, "verify_captcha", lambda param: True)
+    monkeypatch.setattr(account_api, "verify_captcha", lambda param: True)
     monkeypatch.setattr(auth_service, "send_verification_code", lambda email, code: True)
 
 
@@ -168,16 +170,14 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 def request_sms_code(
     client: TestClient, client_id: str, phone: str, purpose: str = "login"
 ) -> dict:
-    """Request an SMS code through the real captcha flow (debug exposes it)."""
-    captcha = client.get("/auth/captcha").json()
+    """Request an SMS code (captcha verification is mocked to accept)."""
     response = client.post(
         "/auth/sms/request-code",
         json={
             "client_id": client_id,
             "phone": phone,
             "purpose": purpose,
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert response.status_code == 200, response.text

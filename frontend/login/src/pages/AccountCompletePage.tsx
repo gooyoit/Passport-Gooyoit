@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Link2, ShieldCheck, UserRound } from "lucide-react";
 import Showcase from "../components/Showcase";
 import { api, redirectUriSchema, safeRedirect } from "../lib/utils";
-import { useCaptcha } from "../hooks/useCaptcha";
+import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type SetupContext = {
   provider: string;
@@ -22,7 +22,24 @@ export default function AccountCompletePage() {
   const [message, setMessage] = useState("");
   const [codeMessage, setCodeMessage] = useState("");
   const [cooldown, setCooldown] = useState(0);
-  const captcha = useCaptcha();
+
+  async function handleCaptchaVerify(captchaVerifyParam: string) {
+    if (!context) return { captchaResult: true, bizResult: false };
+    try {
+      await api("/auth/email/request-code", {
+        method: "POST",
+        body: JSON.stringify({ client_id: context.client_id, email: form.email, captcha_verify_param: captchaVerifyParam, purpose: "bind" }),
+      });
+      setCodeMessage("验证码已发送");
+      setCooldown(60);
+      return { captchaResult: true, bizResult: true };
+    } catch (error) {
+      setMessage((error as Error).message);
+      return { captchaResult: true, bizResult: false };
+    }
+  }
+
+  const captcha = useAliyunCaptcha(handleCaptchaVerify);
 
   useEffect(() => {
     if (!token) {
@@ -44,33 +61,10 @@ export default function AccountCompletePage() {
     return (event: React.ChangeEvent<HTMLInputElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   }
 
-  async function requestEmailCode() {
+  function requestEmailCode() {
     if (!form.email || cooldown > 0) return;
-    await captcha.fetchCaptcha();
-    captcha.setShowCaptchaModal(true);
-  }
-
-  async function submitCaptcha() {
-    if (!context || captcha.captchaAnswer.length < 4) {
-      captcha.setCaptchaError("请输入完整图形验证码");
-      return;
-    }
-    setLoading(true);
-    captcha.setCaptchaError("");
-    try {
-      await api("/auth/email/request-code", {
-        method: "POST",
-        body: JSON.stringify({ client_id: context.client_id, email: form.email, captcha_key: captcha.captchaKey, captcha_answer: captcha.captchaAnswer, purpose: "bind" }),
-      });
-      setCodeMessage("验证码已发送");
-      setCooldown(60);
-      captcha.setShowCaptchaModal(false);
-    } catch (error) {
-      captcha.setCaptchaError((error as Error).message);
-      await captcha.fetchCaptcha();
-      captcha.setCaptchaAnswer("");
-    } finally {
-      setLoading(false);
+    if (!captcha.trigger()) {
+      setMessage("人机验证暂不可用，请稍后再试。");
     }
   }
 
@@ -156,7 +150,15 @@ export default function AccountCompletePage() {
         </div>
       </section>
 
-      {captcha.showCaptchaModal && <div className="modal-overlay" onClick={() => captcha.setShowCaptchaModal(false)}><div className="modal-card" onClick={(event) => event.stopPropagation()}><h3>完成安全验证</h3><div className="captcha-row">{captcha.captchaImage.startsWith("data:image/") && <img className="captcha-img" src={captcha.captchaImage} alt="图形验证码" onClick={captcha.fetchCaptcha} />}<input value={captcha.captchaAnswer} onChange={(event) => captcha.setCaptchaAnswer(event.target.value)} maxLength={4} placeholder="验证码" /></div>{captcha.captchaError && <p className="msg">{captcha.captchaError}</p>}<div className="modal-actions"><button type="button" className="text-btn" onClick={() => captcha.setShowCaptchaModal(false)}>取消</button><button type="button" className="primary-btn" onClick={submitCaptcha} disabled={loading}>确认</button></div></div></div>}
+      <div id="aliyun-captcha-element" />
+      <button
+        ref={captcha.triggerRef}
+        id="aliyun-captcha-trigger"
+        type="button"
+        style={{ display: "none" }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </main>
   );
 }

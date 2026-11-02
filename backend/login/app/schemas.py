@@ -27,14 +27,6 @@ class EmailCodeResponse(BaseModel):
     debug_code: str | None = None
 
 
-class CaptchaResponse(BaseModel):
-    """Captcha image response."""
-
-    captcha_key: str
-    captcha_image: str
-    captcha_answer: str | None = None
-
-
 class EmailPasswordLoginRequest(BaseModel):
     """Login with username, email, or phone and password."""
 
@@ -62,8 +54,7 @@ class SmsCodeRequest(BaseModel):
 
     client_id: str
     phone: str
-    captcha_key: str
-    captcha_answer: str = Field(min_length=1, max_length=10)
+    captcha_verify_param: str = Field(min_length=1, max_length=8192)
     purpose: str = Field(default="login", pattern="^(login|register|reset_password)$")
 
     @field_validator("phone")
@@ -260,8 +251,7 @@ class AccountEmailCodeRequest(BaseModel):
     """Send a bind-purpose verification code to an email."""
 
     email: EmailStr
-    captcha_key: str | None = None
-    captcha_answer: str | None = Field(default=None, min_length=1, max_length=10)
+    captcha_verify_param: str | None = Field(default=None, max_length=8192)
 
 
 class AccountEmailBindRequest(BaseModel):

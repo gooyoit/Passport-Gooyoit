@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { GithubIcon as GithubIcon, ShieldCheck, Eye, EyeOff, KeyRound } from "lucide-react";
 import { FaWeixin } from "react-icons/fa";
@@ -6,7 +6,7 @@ import Showcase from "../components/Showcase";
 import GoogleIcon from "../components/GoogleIcon";
 import OtpInput from "../components/OtpInput";
 import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode } from "../lib/utils";
-import { useCaptcha } from "../hooks/useCaptcha";
+import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type FormEvent = React.FormEvent;
 type SmsPurpose = "login" | "register" | "reset_password";
@@ -42,22 +42,53 @@ export default function LoginPage() {
   const [phoneError, setPhoneError] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
-  const [codePurpose, setCodePurpose] = useState<SmsPurpose>("login");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [passwordEnabled, setPasswordEnabled] = useState(true);
   const [appName, setAppName] = useState(oauth.appName);
-  const {
-    captchaKey,
-    captchaImage,
-    captchaAnswer,
-    setCaptchaAnswer,
-    showCaptchaModal,
-    setShowCaptchaModal,
-    captchaError,
-    setCaptchaError,
-    fetchCaptcha,
-  } = useCaptcha();
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const purposeRef = useRef<SmsPurpose>("login");
+
+  async function handleCaptchaVerify(captchaVerifyParam: string) {
+    const phoneValue = normalizeCnPhone(phoneRef.current);
+    if (!phoneValue) {
+      setPhoneError(t("login.phoneInvalid"));
+      return { captchaResult: true, bizResult: false };
+    }
+    try {
+      const r = await api<{ sent: boolean; debug_code?: string }>(
+        "/auth/sms/request-code",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            client_id: oauth.clientId,
+            phone: phoneValue,
+            purpose: purposeRef.current,
+            captcha_verify_param: captchaVerifyParam,
+          }),
+        },
+      );
+      if (import.meta.env.DEV) setDebugCode(r.debug_code ?? "");
+      setCodeSent(true);
+      setCodeMsg("");
+      setCooldown(60);
+      return { captchaResult: true, bizResult: true };
+    } catch (err) {
+      const m = (err as Error).message;
+      if (m.includes("Captcha verification failed")) {
+        return { captchaResult: false, bizResult: false };
+      }
+      if (m.includes("rate limit") || m.includes("Too Many")) {
+        setCodeMsg(t("login.tooFrequent"));
+      } else {
+        setCodeMsg(m);
+      }
+      return { captchaResult: true, bizResult: false };
+    }
+  }
+
+  const captcha = useAliyunCaptcha(handleCaptchaVerify);
 
   useEffect(() => {
     document.title = t(
@@ -115,49 +146,9 @@ export default function LoginPage() {
       setPhoneError(t("login.phoneInvalid"));
       return;
     }
-    setCodePurpose(purpose);
-    await fetchCaptcha();
-    setShowCaptchaModal(true);
-  }
-
-  async function submitCaptcha() {
-    if (captchaAnswer.length < 4) {
-      setCaptchaError(t("login.captchaInvalid"));
-      return;
-    }
-    setLoading(true);
-    setCaptchaError("");
-    try {
-      const r = await api<{ sent: boolean; debug_code?: string }>(
-        "/auth/sms/request-code",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            client_id: oauth.clientId,
-            phone,
-            purpose: codePurpose,
-            captcha_key: captchaKey,
-            captcha_answer: captchaAnswer,
-          }),
-        },
-      );
-      if (import.meta.env.DEV) setDebugCode(r.debug_code ?? "");
-      setCodeSent(true);
-      setCodeMsg("");
-      setCooldown(60);
-      setShowCaptchaModal(false);
-    } catch (err) {
-      const m = (err as Error).message;
-      if (m.includes("rate limit") || m.includes("Too Many")) {
-        setShowCaptchaModal(false);
-        setCodeMsg(t("login.tooFrequent"));
-      } else {
-        setCaptchaError(m);
-        fetchCaptcha();
-        setCaptchaAnswer("");
-      }
-    } finally {
-      setLoading(false);
+    purposeRef.current = purpose;
+    if (!captcha.trigger()) {
+      setCodeMsg(t("login.captchaUnavailable"));
     }
   }
 
@@ -592,24 +583,15 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {showCaptchaModal && (
-        <div className="modal-overlay" onClick={() => setShowCaptchaModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("login.captchaTitle")}</h3>
-            <div className="captcha-row">
-              {!captchaImage.startsWith("data:image/") ? null : <img className="captcha-img" src={captchaImage} alt="CAPTCHA" onClick={fetchCaptcha} title={t("login.captchaRefresh")} />}
-              <input type="text" value={captchaAnswer} onChange={(e) => setCaptchaAnswer(e.target.value)} placeholder={t("login.captchaPlaceholder")} maxLength={4} />
-            </div>
-            {captchaError && <p className="msg" style={{ margin: 0 }}>{captchaError}</p>}
-            <div className="captcha-actions">
-              <button type="button" className="text-btn" onClick={() => setShowCaptchaModal(false)}>{t("login.captchaCancel")}</button>
-              <button type="button" className="primary-btn" disabled={loading || !captchaAnswer} onClick={submitCaptcha}>
-                {loading ? "..." : t("login.captchaConfirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div id="aliyun-captcha-element" />
+      <button
+        ref={captcha.triggerRef}
+        id="aliyun-captcha-trigger"
+        type="button"
+        style={{ display: "none" }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </main>
   );
 }

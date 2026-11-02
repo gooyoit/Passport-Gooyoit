@@ -45,8 +45,11 @@ class Settings(BaseSettings):
     aliyun_sms_template_reset_password: str = ""
     aliyun_sms_endpoint: str = "dysmsapi.aliyuncs.com"
     resend_api_key: str = ""
-    captcha_ttl_seconds: int = 300
-    captcha_length: int = 4
+    # Aliyun Captcha 2.0 (VerifyIntelligentCaptcha); empty scene_id disables captcha checks
+    aliyun_captcha_access_key_id: str = ""
+    aliyun_captcha_access_key_secret: str = ""
+    aliyun_captcha_scene_id: str = ""
+    aliyun_captcha_endpoint: str = "captcha20230305.aliyuncs.com"
     rate_limit_email_per_minute: int = 1
     rate_limit_ip_per_hour: int = 10
     rate_limit_failed_attempts: int = 5

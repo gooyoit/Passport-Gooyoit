@@ -89,15 +89,13 @@ def test_sms_register_rejected_on_closed_app(
         db_session, enable_public_users=False, login_methods=["sms_code"]
     )
 
-    captcha = client.get("/auth/captcha").json()
     rejected = client.post(
         "/auth/sms/request-code",
         json={
             "client_id": application["client_id"],
             "phone": "13800138000",
             "purpose": "register",
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert rejected.status_code == 400
@@ -111,15 +109,13 @@ def test_sms_register_existing_phone_gets_conflict_on_code_request(
     application = create_test_application(db_session, login_methods=["sms_code"])
     _seed_user_with_password(db_session, "13800138000", "StrongPass1!")
 
-    captcha = client.get("/auth/captcha").json()
     conflict = client.post(
         "/auth/sms/request-code",
         json={
             "client_id": application["client_id"],
             "phone": "13800138000",
             "purpose": "register",
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert conflict.status_code == 409
@@ -209,15 +205,13 @@ def test_sms_reset_password_requires_registered_phone(
 ) -> None:
     application = create_test_application(db_session, login_methods=["sms_code"])
 
-    captcha = client.get("/auth/captcha").json()
     rejected = client.post(
         "/auth/sms/request-code",
         json={
             "client_id": application["client_id"],
             "phone": "13900139000",
             "purpose": "reset_password",
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert rejected.status_code == 400

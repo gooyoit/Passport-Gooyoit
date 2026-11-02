@@ -204,97 +204,6 @@ button, input, a { font: inherit; }
   font-size: 14px;
 }
 
-/* ── captcha modal ─────────────────────────────────── */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: grid;
-  place-items: center;
-  z-index: 100;
-  padding: 24px;
-}
-
-.modal-card {
-  width: min(360px, 100%);
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  padding: 28px 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
-
-.modal-card .msg {
-  color: #EF4444;
-}
-
-.modal-card h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.captcha-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-}
-
-.captcha-img {
-  width: 120px;
-  height: 44px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  object-fit: cover;
-  flex-shrink: 0;
-  transition: border-color 0.15s;
-}
-
-.captcha-img:hover {
-  border-color: var(--border-hover);
-}
-
-.captcha-row input {
-  flex: 1;
-  min-width: 0;
-}
-
-.modal-card .primary-btn {
-  margin-top: 0;
-}
-
-.captcha-actions {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-}
-
-.captcha-actions > button {
-  flex: 1;
-}
-
-@media (max-width: 480px) {
-  .modal-overlay {
-    padding: 16px;
-  }
-
-  .modal-card {
-    padding: 24px 18px;
-    gap: 16px;
-  }
-
-  .captcha-img {
-    width: 108px;
-  }
-}
-
 /* ── code row (verification code + send button) ──────── */
 
 .code-row {
@@ -942,15 +851,6 @@ h1 {
 }
 
 .link-note svg { flex-shrink: 0; margin-top: 1px; }
-
-.modal-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  width: 100%;
-}
-
-.modal-actions .primary-btn { margin: 0; }
 
 @media (max-width: 960px) {
   .shell {

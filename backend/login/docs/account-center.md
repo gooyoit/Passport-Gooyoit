@@ -97,7 +97,7 @@ curl -X POST -H "Authorization: Bearer <access_token>" \
 - 邮箱已被其他账号绑定（`409`），或用户已绑定其他邮箱（`409`，当前版本不支持换绑）时**不会发送邮件**，直接返回错误。
 - 验证码 10 分钟内有效，一次性使用。
 - 速率限制：同一邮箱每分钟 1 次、同一 IP 每小时 10 次。
-- Passport 自己的账号中心页走 SSO cookie 调用同一接口时需要额外传 `captcha_key` / `captcha_answer`（图形验证码，来自 `GET /auth/captcha`）；**业务系统带 Bearer token 调用时不需要。**
+- Passport 自己的账号中心页走 SSO cookie 调用同一接口时需要额外传 `captcha_verify_param`（阿里云验证码 2.0 的验签参数，来自页面内的人机验证组件）；**业务系统带 Bearer token 调用时不需要。**
 
 ### 绑定邮箱 `POST /account/email/bind`
 

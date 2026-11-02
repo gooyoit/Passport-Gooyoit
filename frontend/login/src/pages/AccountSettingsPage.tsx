@@ -13,7 +13,7 @@ import {
 import { FaWeixin } from "react-icons/fa";
 import GoogleIcon from "../components/GoogleIcon";
 import { api } from "../lib/utils";
-import { useCaptcha } from "../hooks/useCaptcha";
+import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type Identity = { provider: string; provider_email: string | null };
 
@@ -59,7 +59,33 @@ export default function AccountSettingsPage() {
   const [message, setMessage] = useState("");
   const [codeMessage, setCodeMessage] = useState("");
   const [cooldown, setCooldown] = useState(0);
-  const captcha = useCaptcha();
+
+  async function handleCaptchaVerify(captchaVerifyParam: string) {
+    try {
+      await api("/account/email/send-code", {
+        method: "POST",
+        body: JSON.stringify({ email, captcha_verify_param: captchaVerifyParam }),
+      });
+      setCodeMessage(t("accountSettings.codeSent"));
+      setCooldown(60);
+      return { captchaResult: true, bizResult: true };
+    } catch (error) {
+      const detail = (error as Error).message;
+      if (detail.includes("already bound to another account")) {
+        setShowMerge(true);
+        setMergeIdentifier(email);
+        setMessage(t("accountSettings.mergeHint"));
+        return { captchaResult: true, bizResult: false };
+      }
+      if (detail.includes("Captcha verification failed")) {
+        return { captchaResult: false, bizResult: false };
+      }
+      setMessage(detail);
+      return { captchaResult: true, bizResult: false };
+    }
+  }
+
+  const captcha = useAliyunCaptcha(handleCaptchaVerify);
 
   const [email, setEmail] = useState("");
   const [emailCode, setEmailCode] = useState("");
@@ -94,45 +120,10 @@ export default function AccountSettingsPage() {
     return (event: React.ChangeEvent<HTMLInputElement>) => setters[key](event.target.value);
   }
 
-  async function requestEmailCode() {
+  function requestEmailCode() {
     if (!email || cooldown > 0) return;
-    await captcha.fetchCaptcha();
-    captcha.setShowCaptchaModal(true);
-  }
-
-  async function submitCaptcha() {
-    if (captcha.captchaAnswer.length < 4) {
-      captcha.setCaptchaError(t("accountSettings.captchaRequired"));
-      return;
-    }
-    setBusy(true);
-    captcha.setCaptchaError("");
-    try {
-      await api("/account/email/send-code", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          captcha_key: captcha.captchaKey,
-          captcha_answer: captcha.captchaAnswer,
-        }),
-      });
-      setCodeMessage(t("accountSettings.codeSent"));
-      setCooldown(60);
-      captcha.setShowCaptchaModal(false);
-    } catch (error) {
-      const detail = (error as Error).message;
-      if (detail.includes("already bound to another account")) {
-        setShowMerge(true);
-        setMergeIdentifier(email);
-        captcha.setShowCaptchaModal(false);
-        setMessage(t("accountSettings.mergeHint"));
-      } else {
-        captcha.setCaptchaError(detail);
-        await captcha.fetchCaptcha();
-        captcha.setCaptchaAnswer("");
-      }
-    } finally {
-      setBusy(false);
+    if (!captcha.trigger()) {
+      setMessage(t("accountSettings.captchaUnavailable"));
     }
   }
 
@@ -409,24 +400,15 @@ export default function AccountSettingsPage() {
         <a className="text-btn settings-signout" href="/api/auth/logout">{t("accountSettings.signOut")}</a>
       </div>
 
-      {captcha.showCaptchaModal && (
-        <div className="modal-overlay" onClick={() => captcha.setShowCaptchaModal(false)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <h3>{t("accountSettings.captchaTitle")}</h3>
-            <div className="captcha-row">
-              {captcha.captchaImage.startsWith("data:image/") && (
-                <img className="captcha-img" src={captcha.captchaImage} alt="captcha" onClick={captcha.fetchCaptcha} />
-              )}
-              <input value={captcha.captchaAnswer} onChange={(event) => captcha.setCaptchaAnswer(event.target.value)} maxLength={4} placeholder={t("accountSettings.captchaPlaceholder")} />
-            </div>
-            {captcha.captchaError && <p className="msg">{captcha.captchaError}</p>}
-            <div className="modal-actions">
-              <button type="button" className="text-btn" onClick={() => captcha.setShowCaptchaModal(false)}>{t("accountSettings.cancel")}</button>
-              <button type="button" className="primary-btn" onClick={submitCaptcha} disabled={busy}>{t("accountSettings.confirm")}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div id="aliyun-captcha-element" />
+      <button
+        ref={captcha.triggerRef}
+        id="aliyun-captcha-trigger"
+        type="button"
+        style={{ display: "none" }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </main>
   );
 }

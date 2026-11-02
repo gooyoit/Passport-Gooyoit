@@ -16,7 +16,6 @@ from app.schemas import (
     AccountSetupRead,
     AccountSetupRequest,
     AccountSetupResponse,
-    CaptchaResponse,
     EmailCodeResponse,
     EmailLoginResponse,
     EmailPasswordLoginRequest,
@@ -45,7 +44,7 @@ from app.services.auth import (
     complete_sms_password_reset,
     issue_sms_code,
 )
-from app.services.captcha import generate_captcha, verify_captcha
+from app.services.aliyun_captcha import verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_login_lockout,
@@ -160,14 +159,6 @@ def _check_rate_limit(request: Request, check_fn, *, log_label: str, email: str 
     return redis_client
 
 
-@router.get("/captcha", response_model=CaptchaResponse)
-def get_captcha() -> CaptchaResponse:
-    """Generate a captcha image."""
-    redis_client = get_redis_client()
-    data = generate_captcha(redis_client)
-    return CaptchaResponse(**data)
-
-
 @router.post("/email/login-password", response_model=EmailLoginResponse)
 def email_password_login(
     payload: EmailPasswordLoginRequest,
@@ -233,11 +224,11 @@ def request_sms_code(
             detail=e.detail,
             headers={"Retry-After": str(e.retry_after)},
         )
-    if not verify_captcha(redis_client, payload.captcha_key, payload.captcha_answer):
+    if not verify_captcha(payload.captcha_verify_param):
         logger.warning("captcha_verification_failed", phone=payload.phone)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired captcha",
+            detail="Captcha verification failed",
         )
 
     code = issue_sms_code(

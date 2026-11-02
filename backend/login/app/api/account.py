@@ -27,7 +27,7 @@ from app.services.account import (
     set_account_credentials,
 )
 from app.services.auth import SSO_COOKIE_NAME, issue_email_code, set_sso_cookie
-from app.services.captcha import verify_captcha
+from app.services.aliyun_captcha import verify_captcha
 from app.services.rate_limit import (
     RateLimitExceeded,
     check_login_lockout,
@@ -95,13 +95,12 @@ def send_bind_code(
         # The SSO cookie path lacks the freshness of a 2h access token,
         # so a captcha proof is required before mailing a code.
         if (
-            not payload.captcha_key
-            or not payload.captcha_answer
-            or not verify_captcha(redis_client, payload.captcha_key, payload.captcha_answer)
+            not payload.captcha_verify_param
+            or not verify_captcha(payload.captcha_verify_param)
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired captcha",
+                detail="Captcha verification failed",
             )
 
     client_id = None

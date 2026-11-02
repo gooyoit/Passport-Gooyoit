@@ -140,14 +140,12 @@ def test_sms_rate_limit_blocks_burst(
 
     first = None
     for i in range(2):
-        captcha = client.get("/auth/captcha").json()
         response = client.post(
             "/auth/sms/request-code",
             json={
                 "client_id": application["client_id"],
                 "phone": "13800138000",
-                "captcha_key": captcha["captcha_key"],
-                "captcha_answer": captcha["captcha_answer"],
+                "captcha_verify_param": "test-captcha-token",
             },
         )
         if i == 0:
@@ -204,14 +202,12 @@ def test_phone_variants_share_one_bucket(
     first = None
     second = None
     for phone in ["+8613800138000", "13800138000"]:
-        captcha = client.get("/auth/captcha").json()
         r = client.post(
             "/auth/sms/request-code",
             json={
                 "client_id": application["client_id"],
                 "phone": phone,
-                "captcha_key": captcha["captcha_key"],
-                "captcha_answer": captcha["captcha_answer"],
+                "captcha_verify_param": "test-captcha-token",
             },
         )
         if first is None:

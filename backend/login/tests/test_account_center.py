@@ -105,13 +105,11 @@ def test_send_code_cookie_path_requires_captcha(
     )
     assert missing.status_code == 400
 
-    captcha = client.get("/auth/captcha").json()
     ok = client.post(
         "/account/email/send-code",
         json={
             "email": "bind@example.com",
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert ok.status_code == 200, ok.text
@@ -538,15 +536,13 @@ def test_registration_hidden_and_rejected_when_public_signup_disabled(
     assert methods.status_code == 200
     assert methods.json()["allow_registration"] is False
 
-    captcha = client.get("/auth/captcha").json()
     rejected = client.post(
         "/auth/sms/request-code",
         json={
             "client_id": application["client_id"],
             "phone": "13800138000",
             "purpose": "register",
-            "captcha_key": captcha["captcha_key"],
-            "captcha_answer": captcha["captcha_answer"],
+            "captcha_verify_param": "test-captcha-token",
         },
     )
     assert rejected.status_code == 400
