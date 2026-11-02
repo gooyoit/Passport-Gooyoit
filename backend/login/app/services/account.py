@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.redis import get_redis_client
-from app.core.security import hash_password, utcnow, verify_password
+from app.core.security import hash_password, verify_password
 from app.models import (
     ApplicationUser,
     OAuthAuthorizationCode,
@@ -62,7 +62,8 @@ def bind_email_to_current_user(db: Session, *, user: User, email: str) -> None:
     """Attach an email to the authenticated account without proving ownership.
 
     Binding is a deliberate user action; only the format and the
-    not-taken-by-someone-else checks apply.
+    not-taken-by-someone-else checks apply. email_verified_at stays NULL so
+    the profile/userinfo flags honestly report the unproven ownership.
     """
     normalized = email.lower()
 
@@ -85,7 +86,6 @@ def bind_email_to_current_user(db: Session, *, user: User, email: str) -> None:
         )
 
     user.email = normalized
-    user.email_verified_at = user.email_verified_at or utcnow()
     if identity is None:
         db.add(
             UserIdentity(
@@ -159,8 +159,6 @@ def link_current_user_to_existing(
         )
     if target.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
-    if target.email and target.email.lower() == normalized and not target.email_verified_at:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email is not verified")
     if target.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

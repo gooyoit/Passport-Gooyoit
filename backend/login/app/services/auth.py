@@ -354,8 +354,6 @@ def complete_password_login(
     )
     if user is None or not user.hashed_password:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
-    if user.email and user.email.lower() == normalized_identifier and not user.email_verified_at:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email is not verified")
     if not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
 

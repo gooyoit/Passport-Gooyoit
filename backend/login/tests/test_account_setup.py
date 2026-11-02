@@ -168,6 +168,46 @@ def test_wechat_link_mode_binds_existing_local_account(
 
 
 
+def test_setup_new_mode_rejects_email_owned_by_existing_account(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """A claimed email must never resolve the pending identity to that user."""
+    from app.models import User, UserIdentity
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
+    application, context = _pending_wechat_token(
+        db_session, enable_public_users=True
+    )
+    victim = User(
+        username="victim",
+        email="victim@example.com",
+        hashed_password=None,
+        status="active",
+    )
+    db_session.add(victim)
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+
+    response = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "email": "victim@example.com",
+        },
+    )
+
+    assert response.status_code == 409
+    # The wechat identity must not have been attached to the victim's account.
+    assert (
+        db_session.query(UserIdentity)
+        .filter_by(user_id=victim.id, provider="wechat")
+        .count()
+        == 0
+    )
+
+
 def test_setup_link_mode_locks_out_brute_force(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:

@@ -108,13 +108,6 @@ def complete_account_setup(
             raise HTTPException(status_code=401, detail="Invalid username/email or password")
         if user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="User is disabled")
-        normalized_identifier = payload.identifier.strip().lower()
-        if (
-            user.email
-            and user.email.lower() == normalized_identifier
-            and not user.email_verified_at
-        ):
-            raise HTTPException(status_code=401, detail="Email is not verified")
     else:
         username = (
             payload.username.strip().lower()
@@ -128,35 +121,36 @@ def complete_account_setup(
         )
         user = None
         if email:
-            user = db.scalar(select(User).where(func.lower(User.email) == email))
-            if user is not None:
-                if user.status != UserStatus.ACTIVE:
-                    raise HTTPException(status_code=403, detail="User is disabled")
-                user.email_verified_at = user.email_verified_at or utcnow()
+            existing_by_email = db.scalar(select(User).where(func.lower(User.email) == email))
+            if existing_by_email is not None:
+                # No proof of email ownership at this entry point (no emailed code
+                # anymore), so never attach the pending identity to that user.
+                raise HTTPException(
+                    status_code=409,
+                    detail="Email is already bound to another account",
+                )
 
-        if user is None:
-            if payload.mode == "new" and bool(username) != bool(payload.password):
-                raise HTTPException(status_code=400, detail="Username and password must be set together")
-            if username and db.scalar(
-                select(User.id).where(func.lower(User.username) == username)
-            ):
-                raise HTTPException(status_code=409, detail="Username is already in use")
-            user = User(
-                username=username,
-                email=email,
-                email_verified_at=utcnow() if email else None,
-                contact_phone=payload.contact_phone if payload.mode == "new" else None,
-                display_name=pending.get("display_name") or username or "Passport User",
-                avatar_url=pending.get("avatar_url"),
-                hashed_password=(
-                    hash_password(payload.password)
-                    if payload.mode == "new" and payload.password
-                    else None
-                ),
-                status=UserStatus.ACTIVE,
-            )
-            db.add(user)
-            db.flush()
+        if payload.mode == "new" and bool(username) != bool(payload.password):
+            raise HTTPException(status_code=400, detail="Username and password must be set together")
+        if username and db.scalar(
+            select(User.id).where(func.lower(User.username) == username)
+        ):
+            raise HTTPException(status_code=409, detail="Username is already in use")
+        user = User(
+            username=username,
+            email=email,
+            contact_phone=payload.contact_phone if payload.mode == "new" else None,
+            display_name=pending.get("display_name") or username or "Passport User",
+            avatar_url=pending.get("avatar_url"),
+            hashed_password=(
+                hash_password(payload.password)
+                if payload.mode == "new" and payload.password
+                else None
+            ),
+            status=UserStatus.ACTIVE,
+        )
+        db.add(user)
+        db.flush()
         if email:
             email_identity = db.scalar(
                 select(UserIdentity).where(

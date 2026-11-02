@@ -235,7 +235,7 @@ export default function AccountSettingsPage() {
             <div className="credential-label">
               <strong>{t("accountSettings.emailCredential")}</strong>
               {profile.user.email ? (
-                <span>{profile.user.email}{profile.user.email_verified ? "" : ` · ${t("accountSettings.unverified")}`}</span>
+                <span>{profile.user.email}</span>
               ) : (
                 <span>{t("accountSettings.emailHint")}</span>
               )}

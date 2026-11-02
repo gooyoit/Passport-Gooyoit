@@ -85,7 +85,7 @@ def test_bind_email_happy_path_and_conflicts(
     )
     assert bound.status_code == 200
     assert bound.json()["user"]["email"] == "bind@example.com"
-    assert bound.json()["user"]["email_verified"] is True
+    assert bound.json()["user"]["email_verified"] is False
 
     db_session.expire_all()
     refreshed = db_session.get(User, user.id)
