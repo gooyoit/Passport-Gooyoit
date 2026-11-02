@@ -155,6 +155,33 @@ def test_sms_rate_limit_blocks_burst(
             assert response.status_code == 429
 
 
+def test_captcha_failure_does_not_burn_sms_quota(
+    client: TestClient, db_session: Session, sms_sender, monkeypatch
+) -> None:
+    """A failed slider attempt must not consume the per-minute SMS quota."""
+    from app.api import auth as auth_api
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+    monkeypatch.setattr(
+        auth_api, "verify_captcha", lambda param: param == "test-captcha-token"
+    )
+    application = create_test_application(db_session, login_methods=["sms_code"])
+
+    payload = {
+        "client_id": application["client_id"],
+        "phone": "13800138000",
+        "captcha_verify_param": "bad-captcha-token",
+    }
+    failed = client.post("/auth/sms/request-code", json=payload)
+    assert failed.status_code == 400
+
+    payload["captcha_verify_param"] = "test-captcha-token"
+    ok = client.post("/auth/sms/request-code", json=payload)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["debug_code"]
+
+
 def test_sms_code_burns_after_repeated_wrong_guesses(
     client: TestClient, db_session: Session, sms_sender
 ) -> None:

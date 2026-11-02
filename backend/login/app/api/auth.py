@@ -213,6 +213,12 @@ def request_sms_code(
     db: Session = Depends(get_db),
 ) -> EmailCodeResponse:
     """Request an SMS login code (captcha-gated, throttled)."""
+    if not verify_captcha(payload.captcha_verify_param):
+        logger.warning("captcha_verification_failed", phone=payload.phone)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Captcha verification failed",
+        )
     redis_client = get_redis_client()
     client_ip = get_client_ip(request)
     try:
@@ -223,12 +229,6 @@ def request_sms_code(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=e.detail,
             headers={"Retry-After": str(e.retry_after)},
-        )
-    if not verify_captcha(payload.captcha_verify_param):
-        logger.warning("captcha_verification_failed", phone=payload.phone)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Captcha verification failed",
         )
 
     code = issue_sms_code(
