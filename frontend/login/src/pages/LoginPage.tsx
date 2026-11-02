@@ -160,6 +160,10 @@ export default function LoginPage() {
 
   async function login(e: FormEvent) {
     e.preventDefault();
+    if (mode === "sms" && !normalizeCnPhone(phone)) {
+      setPhoneError(t("login.phoneInvalid"));
+      return;
+    }
     setLoading(true);
     setMsg("");
     try {
@@ -465,7 +469,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     className="primary-btn"
-                    disabled={loading}
+                    disabled={loading || (mode === "sms" && code.length < 4)}
                   >
                     {loading ? t("login.logging") : t("login.submit")}
                   </button>
