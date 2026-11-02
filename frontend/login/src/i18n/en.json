@@ -58,6 +58,32 @@
     "termsSuffix": ".",
     "accountSettings": "Account settings"
   },
+  "legal": {
+    "close": "Got it",
+    "tos": {
+      "title": "Terms of Service",
+      "updated": "Last updated: 2026-11-03",
+      "sections": [
+        { "h": "About the service", "p": "Gooyoit Passport (\"the service\") provides unified account sign-in, identity verification, and authorization for connected applications. By signing in to any connected application through the service, you agree to these terms." },
+        { "h": "Accounts and security", "p": "Accounts registered with an SMS-verified phone number belong to you. Keep your credentials and verification codes safe; actions taken through your account are presumed to be yours. If your account is compromised, change your sign-in methods in Account Center or contact the administrator of the connected application." },
+        { "h": "Acceptable use", "p": "You agree not to use the service for unlawful activities, not to attack or circumvent its security controls or those of connected applications, and not to abuse shared resources such as SMS verification. We may limit, suspend, or delete accounts that violate these rules." },
+        { "h": "Changes and availability", "p": "We may change, interrupt, or discontinue the service; material changes will be announced through connected applications or Account Center. We are not liable for outages caused by force majeure or third-party service failures." },
+        { "h": "Updates to these terms", "p": "We may revise these terms from time to time. Revised terms take effect once published on this page; continued use of the service after publication constitutes acceptance." }
+      ]
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "updated": "Last updated: 2026-11-03",
+      "sections": [
+        { "h": "What we collect", "p": "Your phone number (as a sign-in credential, verified via SMS code); the username and email you choose to set; third-party identity, display name, and avatar when you sign in with WeChat or similar providers; and security logs such as sign-in time and IP address." },
+        { "h": "How we use it", "p": "This information is used only for identity verification and sign-in, account security (anomalous-login detection and brute-force protection), and security auditing. We never use it for advertising or purposes unrelated to sign-in and authorization." },
+        { "h": "Sharing", "p": "We do not sell your personal information. Only when you actively sign in to a connected application do we provide it with basic identity data (user ID, display name, avatar). Each application's use of that data is governed by its own privacy policy." },
+        { "h": "Storage", "p": "All data is stored on servers located in mainland China. Transient data — SMS codes, login codes, authorization codes — is deleted as soon as it expires." },
+        { "h": "Cookies", "p": "The service uses only the session cookies required to maintain your single sign-on state. They are not used for behavioral tracking or cross-site advertising." },
+        { "h": "Your rights", "p": "You can review and manage your sign-in methods (phone, email, password, WeChat) in Account Center at any time. To delete your account or exercise other rights, contact the administrator of a connected application." }
+      ]
+    }
+  },
   "accountSettings": {
     "loading": "Loading…",
     "title": "Account settings",

@@ -5,6 +5,7 @@ import { FaWeixin } from "react-icons/fa";
 import Showcase from "../components/Showcase";
 import GoogleIcon from "../components/GoogleIcon";
 import OtpInput from "../components/OtpInput";
+import LegalModal from "../components/LegalModal";
 import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, loginMethodsSchema, bufferDecode, bufferEncode, normalizeCnPhone } from "../lib/utils";
 import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
@@ -36,6 +37,7 @@ export default function LoginPage() {
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [passwordEnabled, setPasswordEnabled] = useState(true);
   const [appName, setAppName] = useState(oauth.appName);
+  const [legal, setLegal] = useState<null | "tos" | "privacy">(null);
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
   const purposeRef = useRef<SmsPurpose>("login");
@@ -569,13 +571,19 @@ export default function LoginPage() {
           )}
           <p className="terms">
             {t("login.termsPre")}
-            <a href="#">{t("login.tos")}</a>
+            <button type="button" onClick={() => setLegal("tos")}>
+              {t("login.tos")}
+            </button>
             {t("login.termsJoin")}
-            <a href="#">{t("login.privacy")}</a>
+            <button type="button" onClick={() => setLegal("privacy")}>
+              {t("login.privacy")}
+            </button>
             {t("login.termsSuffix")}
           </p>
         </div>
       </section>
+
+      {legal && <LegalModal kind={legal} onClose={() => setLegal(null)} />}
 
       <div id="aliyun-captcha-element" />
       <button
