@@ -257,3 +257,35 @@ def test_wechat_embed_url_uses_global_credentials(
     assert response.status_code == 200, response.text
     query = parse_qs(urlsplit(response.json()["authorization_url"]).query)
     assert query["appid"] == ["wx-global"]
+
+
+def test_explicit_wechat_opt_out_beats_global_credentials(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """An application that explicitly disables WeChat must not inherit it."""
+    monkeypatch.setattr(settings, "wechat_app_id", "wx-global")
+    monkeypatch.setattr(settings, "wechat_app_secret", "wx-global-secret")
+    application = create_test_application(db_session)
+    db_session.add(
+        models.ApplicationLoginMethod(
+            application_id=application["id"],
+            method="wechat",
+            enabled=False,
+            config={},
+        )
+    )
+    db_session.commit()
+
+    methods = client.get(f"/oauth/login-methods?client_id={application['client_id']}")
+    assert methods.status_code == 200
+    assert "wechat" not in methods.json()["login_methods"]
+
+    status = client.get(f"/oauth/providers/wechat?client_id={application['client_id']}")
+    assert status.json()["enabled"] is False
+
+    embed = client.get(
+        "/oauth/providers/wechat/embed-url"
+        f"?client_id={application['client_id']}"
+        "&redirect_uri=https://crm.example.com/callback",
+    )
+    assert embed.status_code == 400

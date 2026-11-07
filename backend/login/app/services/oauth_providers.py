@@ -66,25 +66,35 @@ def resolve_provider_config(
     application: Application,
     provider: str,
 ) -> dict[str, Any]:
-    """Return provider credentials, preferring the deployment-wide WeChat config."""
+    """Return provider credentials.
+
+    Precedence: an explicit per-application row wins (including an explicit
+    opt-out), then the deployment-wide WeChat config for applications that
+    never configured WeChat themselves.
+    """
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
-    if provider == "wechat":
-        global_config = global_wechat_config()
-        if global_config is not None:
-            return global_config
     method = (
         db.query(ApplicationLoginMethod)
         .filter(
             ApplicationLoginMethod.application_id == application.id,
             ApplicationLoginMethod.method == provider,
-            ApplicationLoginMethod.enabled.is_(True),
         )
         .one_or_none()
     )
+    if method is not None and not method.enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is disabled")
+    if method is not None and method.config:
+        return method.config
+    if provider == "wechat":
+        global_config = global_wechat_config()
+        if global_config is not None:
+            return global_config
     if method is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is disabled")
-    return method.config or {}
+    # Enabled with an empty config: let build_oauth_client report the
+    # precise missing-credentials error.
+    return {}
 
 
 def build_oauth_client(provider: str, config: dict[str, Any] | None):

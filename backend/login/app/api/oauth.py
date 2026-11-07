@@ -68,9 +68,17 @@ def login_methods(
     ).all()
     method_names = [m.method for m in methods]
     # WeChat is a first-class sign-in method: with deployment-wide credentials
-    # every application gets it, whether or not it has a per-app row.
+    # every application gets it unless it explicitly opted out.
     if global_wechat_config() is not None and "wechat" not in method_names:
-        method_names.append("wechat")
+        explicit_off = db.scalar(
+            select(ApplicationLoginMethod).where(
+                ApplicationLoginMethod.application_id == application.id,
+                ApplicationLoginMethod.method == "wechat",
+                ApplicationLoginMethod.enabled.is_(False),
+            )
+        )
+        if explicit_off is None:
+            method_names.append("wechat")
     return LoginMethodsResponse(
         login_methods=method_names,
         application_name=application.name,
@@ -148,16 +156,18 @@ def oauth_provider_status(
     if application is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    if provider == "wechat" and global_wechat_config() is not None:
+    method = db.scalar(
+        select(ApplicationLoginMethod).where(
+            ApplicationLoginMethod.application_id == application.id,
+            ApplicationLoginMethod.method == provider,
+        )
+    )
+    if method is not None:
+        enabled = method.enabled
+    elif provider == "wechat" and global_wechat_config() is not None:
         enabled = True
     else:
-        method = db.scalar(
-            select(ApplicationLoginMethod).where(
-                ApplicationLoginMethod.application_id == application.id,
-                ApplicationLoginMethod.method == provider,
-            )
-        )
-        enabled = bool(method and method.enabled)
+        enabled = False
     return OAuthProviderRead(provider=provider, enabled=enabled, authorization_url=None)
 
 
