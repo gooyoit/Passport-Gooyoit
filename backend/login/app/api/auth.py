@@ -30,6 +30,7 @@ from app.schemas import (
     WebAuthnRegisterBeginResponse,
     WebAuthnRegisterFinishRequest,
 )
+from app.services.account import find_local_user
 from app.services.account_setup import complete_account_setup, get_pending_account_setup
 from app.services.applications import (
     get_active_application_by_client_id,
@@ -125,9 +126,16 @@ def finish_account_setup(
     """Create or link a local account and resume the original OAuth request."""
     # Both link mode and email binding verify an existing account's password;
     # without a lockout a valid setup token becomes a free password oracle.
-    lockout_key = (payload.identifier or "").strip().lower() or (
-        str(payload.email).lower() if payload.email else ""
-    )
+    # Key on the credential actually verified: link mode resolves the target
+    # user so all of their identifier aliases share one counter, email binding
+    # ignores identifier, and phone binding verifies no password at all.
+    lockout_key: str | None = None
+    if payload.mode == "link" and (payload.identifier or "").strip():
+        target = find_local_user(db, identifier=payload.identifier)
+        lockout_key = f"pwd:{target.id}" if target else payload.identifier.strip().lower()
+    elif payload.mode == "new" and payload.email and not payload.phone:
+        lockout_key = str(payload.email).lower()
+
     redis_client = None
     if lockout_key:
         redis_client = _check_rate_limit(
@@ -140,11 +148,13 @@ def finish_account_setup(
     try:
         redirect_uri = complete_account_setup(db, response, payload)
     except HTTPException as exc:
-        if exc.status_code in (400, 401) and redis_client:
+        # Only a wrong password consumes the budget; a malformed request must
+        # not be able to spend another account's lockout attempts.
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED and redis_client and lockout_key:
             record_failed_login(redis_client, lockout_key, get_client_ip(request))
         raise
 
-    if redis_client:
+    if redis_client and lockout_key:
         clear_failed_login(redis_client, lockout_key, get_client_ip(request))
     return AccountSetupResponse(redirect_uri=redirect_uri)
 

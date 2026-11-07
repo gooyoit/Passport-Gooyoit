@@ -282,6 +282,111 @@ def test_setup_link_mode_locks_out_brute_force(
     assert locked.status_code == 429
 
 
+def test_setup_email_binding_locks_out_brute_force(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Repeated wrong passwords while binding an email trigger the lockout."""
+    from app.api import auth as auth_api
+    from app.core.security import hash_password
+    from app.models import User
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+    _, context = _pending_wechat_token(db_session, enable_public_users=True)
+    db_session.add(
+        User(
+            email="victim@example.com",
+            hashed_password=hash_password("RightPass1!"),
+            status="active",
+        )
+    )
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+
+    for _ in range(5):
+        response = client.post(
+            "/auth/account-setup",
+            json={
+                "token": token,
+                "mode": "new",
+                "email": "victim@example.com",
+                "password": "WrongPass1!",
+            },
+        )
+        assert response.status_code == 401
+
+    locked = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "email": "victim@example.com",
+            "password": "RightPass1!",
+        },
+    )
+    assert locked.status_code == 429
+
+
+def test_setup_email_binding_lockout_ignores_identifier(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Identifier aliases cannot shard or clear the verified email's counter."""
+    from app.api import auth as auth_api
+    from app.core.security import hash_password
+    from app.models import User
+
+    redis = FakeRedis()
+    monkeypatch.setattr(auth_api, "get_redis_client", lambda: redis)
+    _, context = _pending_wechat_token(db_session, enable_public_users=True)
+    db_session.add(
+        User(
+            email="victim@example.com",
+            hashed_password=hash_password("RightPass1!"),
+            status="active",
+        )
+    )
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+
+    for alias in ["alias-1", "alias-2", "alias-3", "alias-4", "alias-5"]:
+        response = client.post(
+            "/auth/account-setup",
+            json={
+                "token": token,
+                "mode": "new",
+                "email": "victim@example.com",
+                "password": "WrongPass1!",
+                "identifier": alias,
+            },
+        )
+        assert response.status_code == 401
+
+    # A successful setup for a different email must not clear the victim's
+    # counter, even when the request spoofs the victim's identifier.
+    other = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "email": "other@example.com",
+            "password": "OtherPass1!",
+            "identifier": "victim@example.com",
+        },
+    )
+    assert other.status_code == 200
+
+    locked = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "email": "victim@example.com",
+            "password": "RightPass1!",
+        },
+    )
+    assert locked.status_code == 429
+
+
 def test_password_login_lockout_survives_identifier_variants(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:
