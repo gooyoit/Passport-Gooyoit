@@ -1,5 +1,6 @@
 """Third-party OAuth provider integration using Authlib."""
 
+import base64
 import os
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -10,6 +11,7 @@ from authlib.integrations.starlette_client import StarletteOAuth2App
 from fastapi import HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import Application, ApplicationLoginMethod
 from app.services.applications import validate_redirect_uri
 
@@ -47,15 +49,30 @@ class WeChatOAuth2App(StarletteOAuth2App):
         return result
 
 
-def get_enabled_provider_method(
+def global_wechat_config() -> dict[str, Any] | None:
+    """Return deployment-wide WeChat credentials, or None when unconfigured."""
+    if not settings.wechat_app_id or not settings.wechat_app_secret:
+        return None
+    return {
+        "client_id": settings.wechat_app_id,
+        "client_secret": settings.wechat_app_secret,
+        "scope": "snsapi_login",
+    }
+
+
+def resolve_provider_config(
     db: Session,
     *,
     application: Application,
     provider: str,
-) -> ApplicationLoginMethod:
-    """Return enabled provider login method or raise."""
+) -> dict[str, Any]:
+    """Return provider credentials, preferring the deployment-wide WeChat config."""
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
+    if provider == "wechat":
+        global_config = global_wechat_config()
+        if global_config is not None:
+            return global_config
     method = (
         db.query(ApplicationLoginMethod)
         .filter(
@@ -67,7 +84,7 @@ def get_enabled_provider_method(
     )
     if method is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is disabled")
-    return method
+    return method.config or {}
 
 
 def build_oauth_client(provider: str, config: dict[str, Any] | None):
@@ -153,16 +170,32 @@ async def authorize_redirect(
     """Start a provider OAuth redirect through Authlib."""
     if not validate_redirect_uri(application, redirect_uri):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid redirect_uri")
-    method = get_enabled_provider_method(db, application=application, provider=provider)
+    config = resolve_provider_config(db, application=application, provider=provider)
     request.session["passport_oauth_context"] = {
         "client_id": application.client_id,
         "provider": provider,
         "redirect_uri": redirect_uri,
         "state": state,
     }
-    client = build_oauth_client(provider, method.config)
+    client = build_oauth_client(provider, config)
     callback_uri = str(request.url_for("oauth_provider_callback", provider=provider))
-    return await client.authorize_redirect(request, callback_uri)
+    authorization_params: dict[str, str] = {}
+    if provider == "wechat":
+        qr_css = (
+            ".impowerBox .qrcode{width:200px;height:200px;}"
+            ".impowerBox .title{display:none;}"
+            ".impowerBox .info{display:none;}"
+        )
+        authorization_params = {
+            "self_redirect": "false",
+            "href": "data:text/css;base64,"
+            + base64.b64encode(qr_css.encode()).decode(),
+        }
+    return await client.authorize_redirect(
+        request,
+        callback_uri,
+        **authorization_params,
+    )
 
 
 async def fetch_provider_profile(provider: str, client: Any, request: Request) -> dict[str, Any]:

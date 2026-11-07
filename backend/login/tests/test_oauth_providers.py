@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app import models
+from app.core.config import settings
 from app.services.oauth_providers import build_oauth_client, fetch_provider_profile
 
 from conftest import create_test_application
@@ -160,3 +161,99 @@ def test_provider_authorize_without_credentials_is_rejected(
     )
     assert response.status_code == 400
     assert "client_id/client_secret" in response.json()["detail"]
+
+
+def test_wechat_authorize_route_retains_clickjacking_protection(
+    client: TestClient, db_session: Session
+) -> None:
+    """Only the WeChat redirect bootstrap may be embedded by the login page."""
+    application = create_test_application(db_session)
+    db_session.add(
+        models.ApplicationLoginMethod(
+            application_id=application["id"],
+            method="wechat",
+            enabled=True,
+            config={},
+        )
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/oauth/providers/wechat/authorize"
+        f"?client_id={application['client_id']}"
+        "&redirect_uri=https://crm.example.com/callback",
+    )
+
+    assert response.status_code == 400
+    assert response.headers["x-frame-options"] == "DENY"
+    assert client.get("/healthz").headers["x-frame-options"] == "DENY"
+
+
+def test_wechat_embed_url_is_returned_as_json(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """The login page gets a direct WeChat iframe URL in the same session."""
+    monkeypatch.setenv("PASSPORT_WECHAT_CLIENT_SECRET", "env-secret")
+    application = create_test_application(db_session)
+    db_session.add(
+        models.ApplicationLoginMethod(
+            application_id=application["id"],
+            method="wechat",
+            enabled=True,
+            config={
+                "client_id": "wx-app",
+                "client_secret_env": "PASSPORT_WECHAT_CLIENT_SECRET",
+            },
+        )
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/oauth/providers/wechat/embed-url"
+        f"?client_id={application['client_id']}"
+        "&redirect_uri=https://crm.example.com/callback"
+        "&state=state-1",
+    )
+
+    assert response.status_code == 200, response.text
+    authorization_url = response.json()["authorization_url"]
+    query = parse_qs(urlsplit(authorization_url).query)
+    assert query["appid"] == ["wx-app"]
+    assert query["self_redirect"] == ["false"]
+    assert query["href"][0].startswith("data:text/css;base64,")
+
+
+def test_login_methods_include_wechat_with_global_credentials(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Deployment-wide WeChat credentials make WeChat available to every application."""
+    monkeypatch.setattr(settings, "wechat_app_id", "wx-global")
+    monkeypatch.setattr(settings, "wechat_app_secret", "wx-global-secret")
+
+    application = create_test_application(
+        db_session, login_methods=["sms_code", "email_password"]
+    )
+
+    response = client.get(f"/oauth/login-methods?client_id={application['client_id']}")
+
+    assert response.status_code == 200, response.text
+    assert "wechat" in response.json()["login_methods"]
+
+
+def test_wechat_embed_url_uses_global_credentials(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """The QR iframe works for an app that never configured WeChat itself."""
+    monkeypatch.setattr(settings, "wechat_app_id", "wx-global")
+    monkeypatch.setattr(settings, "wechat_app_secret", "wx-global-secret")
+    application = create_test_application(db_session)
+
+    response = client.get(
+        "/oauth/providers/wechat/embed-url"
+        f"?client_id={application['client_id']}"
+        "&redirect_uri=https://crm.example.com/callback",
+    )
+
+    assert response.status_code == 200, response.text
+    query = parse_qs(urlsplit(response.json()["authorization_url"]).query)
+    assert query["appid"] == ["wx-global"]

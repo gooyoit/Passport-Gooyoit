@@ -73,7 +73,7 @@ def test_account_setup_rejects_weak_new_password():
 def test_wechat_skip_joins_application_without_public_signup(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:
-    """A verified wechat identity may join even when public signup is off."""
+    """WeChat users cannot enter an application without binding a credential."""
     redis = FakeRedis()
     monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
     application, context = _pending_wechat_token(
@@ -86,17 +86,14 @@ def test_wechat_skip_joins_application_without_public_signup(
         json={"token": token, "mode": "skip"},
     )
 
-    assert response.status_code == 200
-    redirect_uri = response.json()["redirect_uri"]
-    assert redirect_uri.startswith("https://crm.example.com/callback?code=")
-    assert "state=state-9" in redirect_uri
-    assert redis.values == {}
+    assert response.status_code == 422
+    assert redis.values
 
 
-def test_wechat_new_mode_credentials_allow_password_login(
+def test_wechat_new_email_binding_allows_password_login(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:
-    """Username+password captured during setup work for later logins."""
+    """A new email and password become the required local login credential."""
     redis = FakeRedis()
     monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
     application, context = _pending_wechat_token(
@@ -109,7 +106,7 @@ def test_wechat_new_mode_credentials_allow_password_login(
         json={
             "token": token,
             "mode": "new",
-            "username": "wechat_user",
+            "email": "wechat.user@example.com",
             "password": "StrongPass1!",
         },
     )
@@ -120,7 +117,7 @@ def test_wechat_new_mode_credentials_allow_password_login(
         json={
             "client_id": application["client_id"],
             "redirect_uri": "https://crm.example.com/callback",
-            "identifier": "wechat_user",
+            "email": "wechat.user@example.com",
             "password": "StrongPass1!",
         },
     )
@@ -168,10 +165,11 @@ def test_wechat_link_mode_binds_existing_local_account(
 
 
 
-def test_setup_new_mode_rejects_email_owned_by_existing_account(
+def test_setup_email_binding_rejects_wrong_existing_password(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:
-    """A claimed email must never resolve the pending identity to that user."""
+    """An existing email can only receive the WeChat identity after password proof."""
+    from app.core.security import hash_password
     from app.models import User, UserIdentity
 
     redis = FakeRedis()
@@ -182,7 +180,7 @@ def test_setup_new_mode_rejects_email_owned_by_existing_account(
     victim = User(
         username="victim",
         email="victim@example.com",
-        hashed_password=None,
+        hashed_password=hash_password("RightPass1!"),
         status="active",
     )
     db_session.add(victim)
@@ -195,16 +193,55 @@ def test_setup_new_mode_rejects_email_owned_by_existing_account(
             "token": token,
             "mode": "new",
             "email": "victim@example.com",
+            "password": "WrongPass1!",
         },
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 401
     # The wechat identity must not have been attached to the victim's account.
     assert (
         db_session.query(UserIdentity)
         .filter_by(user_id=victim.id, provider="wechat")
         .count()
         == 0
+    )
+
+
+def test_setup_email_binding_merges_into_existing_account(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """Correct existing-email credentials attach WeChat to the canonical account."""
+    from app.core.security import hash_password
+    from app.models import User, UserIdentity
+
+    redis = FakeRedis()
+    monkeypatch.setattr(account_setup, "get_redis_client", lambda: redis)
+    _, context = _pending_wechat_token(db_session, enable_public_users=False)
+    owner = User(
+        email="owner@example.com",
+        hashed_password=hash_password("OwnerPass1!"),
+        status="active",
+    )
+    db_session.add(owner)
+    db_session.commit()
+    token = account_setup.create_pending_account_setup(context)
+
+    response = client.post(
+        "/auth/account-setup",
+        json={
+            "token": token,
+            "mode": "new",
+            "email": "owner@example.com",
+            "password": "OwnerPass1!",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert (
+        db_session.query(UserIdentity)
+        .filter_by(user_id=owner.id, provider="wechat")
+        .count()
+        == 1
     )
 
 
@@ -345,8 +382,6 @@ def test_wechat_new_mode_with_phone_creates_verified_account(
             "mode": "new",
             "phone": "13800138000",
             "code": code,
-            "username": "phone_user",
-            "password": "StrongPass1!",
         },
     )
 
@@ -356,6 +391,7 @@ def test_wechat_new_mode_with_phone_creates_verified_account(
     user = db_session.scalar(select(User).where(User.phone == "13800138000"))
     assert user is not None
     assert user.phone_verified_at is not None
+    assert user.hashed_password is None
     providers = sorted(
         db_session.scalars(
             select(UserIdentity.provider).where(UserIdentity.user_id == user.id)
@@ -363,17 +399,6 @@ def test_wechat_new_mode_with_phone_creates_verified_account(
     )
     assert providers == ["phone", "wechat"]
 
-    login = client.post(
-        "/auth/email/login-password",
-        json={
-            "client_id": application["client_id"],
-            "redirect_uri": "https://crm.example.com/callback",
-            "identifier": "13800138000",
-            "password": "StrongPass1!",
-        },
-    )
-    assert login.status_code == 200
-    assert "code" in login.json()
 
 
 def test_wechat_new_mode_with_owned_phone_merges_into_phone_account(

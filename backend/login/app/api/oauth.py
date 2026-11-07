@@ -40,7 +40,8 @@ from app.services.oauth_providers import (
     authorize_redirect,
     build_oauth_client,
     fetch_provider_profile,
-    get_enabled_provider_method,
+    global_wechat_config,
+    resolve_provider_config,
 )
 from app.services.permissions import get_effective_permissions, get_effective_roles
 from app.services.sso import create_sso_session, resolve_sso_user_id, revoke_sso_session
@@ -65,8 +66,13 @@ def login_methods(
             ApplicationLoginMethod.enabled.is_(True),
         )
     ).all()
+    method_names = [m.method for m in methods]
+    # WeChat is a first-class sign-in method: with deployment-wide credentials
+    # every application gets it, whether or not it has a per-app row.
+    if global_wechat_config() is not None and "wechat" not in method_names:
+        method_names.append("wechat")
     return LoginMethodsResponse(
-        login_methods=[m.method for m in methods],
+        login_methods=method_names,
         application_name=application.name,
         allow_registration=application.enable_public_users
         and any(m.method == "sms_code" for m in methods),
@@ -142,13 +148,16 @@ def oauth_provider_status(
     if application is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    method = db.scalar(
-        select(ApplicationLoginMethod).where(
-            ApplicationLoginMethod.application_id == application.id,
-            ApplicationLoginMethod.method == provider,
+    if provider == "wechat" and global_wechat_config() is not None:
+        enabled = True
+    else:
+        method = db.scalar(
+            select(ApplicationLoginMethod).where(
+                ApplicationLoginMethod.application_id == application.id,
+                ApplicationLoginMethod.method == provider,
+            )
         )
-    )
-    enabled = bool(method and method.enabled)
+        enabled = bool(method and method.enabled)
     return OAuthProviderRead(provider=provider, enabled=enabled, authorization_url=None)
 
 
@@ -175,6 +184,39 @@ async def oauth_provider_authorize(
     )
 
 
+@router.get("/providers/wechat/embed-url", response_model=OAuthProviderRead)
+async def wechat_embed_url(
+    request: Request,
+    client_id: str,
+    redirect_uri: str,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+) -> OAuthProviderRead:
+    """Create a same-session WeChat URL for the login page's QR iframe."""
+    application = get_active_application_by_client_id(db, client_id)
+    if application is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    redirect_response = await authorize_redirect(
+        request=request,
+        db=db,
+        application=application,
+        provider="wechat",
+        redirect_uri=redirect_uri,
+        state=state,
+    )
+    authorization_url = redirect_response.headers.get("location")
+    if not authorization_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="WeChat authorization URL was not generated",
+        )
+    return OAuthProviderRead(
+        provider="wechat",
+        enabled=True,
+        authorization_url=authorization_url,
+    )
+
+
 @router.get("/providers/{provider}/callback", name="oauth_provider_callback")
 async def oauth_provider_callback(
     request: Request,
@@ -189,8 +231,8 @@ async def oauth_provider_callback(
     application = get_active_application_by_client_id(db, context["client_id"])
     if application is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    method = get_enabled_provider_method(db, application=application, provider=provider)
-    client = build_oauth_client(provider, method.config)
+    config = resolve_provider_config(db, application=application, provider=provider)
+    client = build_oauth_client(provider, config)
     profile = await fetch_provider_profile(provider, client, request)
 
     identity = db.scalar(
@@ -199,7 +241,13 @@ async def oauth_provider_callback(
             UserIdentity.provider_user_id == profile["id"],
         )
     )
-    if provider == "wechat" and identity is None:
+    identity_user = db.get(User, identity.user_id) if identity is not None else None
+    requires_wechat_binding = provider == "wechat" and (
+        identity is None
+        or identity_user is None
+        or (identity_user.email is None and identity_user.phone is None)
+    )
+    if requires_wechat_binding:
         setup_token = create_pending_account_setup(
             {
                 "provider": provider,
@@ -213,9 +261,16 @@ async def oauth_provider_callback(
             }
         )
         origin = f"{request.url.scheme}://{request.url.netloc}"
-        return RedirectResponse(
-            f"{origin}/account/complete?{urlencode({'token': setup_token})}"
-        )
+        # Carry the OAuth context so "back to sign-in" can restore this app's
+        # login page instead of a bare passport.gooyoit.com.
+        params = {
+            "token": setup_token,
+            "client_id": application.client_id,
+            "redirect_uri": context["redirect_uri"],
+        }
+        if context.get("state"):
+            params["state"] = context["state"]
+        return RedirectResponse(f"{origin}/account/complete?{urlencode(params)}")
 
     user = get_or_create_oauth_user(
         db,

@@ -2,7 +2,7 @@
 
 import re
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator, model_validator
 
 
 def _password_complexity(password: str) -> str:
@@ -28,13 +28,22 @@ class EmailCodeResponse(BaseModel):
 
 
 class EmailPasswordLoginRequest(BaseModel):
-    """Login with username, email, or phone and password."""
+    """Login or register with email; identifier remains for legacy clients."""
 
     client_id: str
     redirect_uri: HttpUrl
-    identifier: str = Field(min_length=1, max_length=255)
+    email: EmailStr | None = None
+    identifier: str | None = Field(default=None, min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=128)
     state: str | None = None
+    # Default keeps the previous behaviour for clients that never send it.
+    remember_me: bool = True
+
+    @model_validator(mode="after")
+    def require_email_or_identifier(self):
+        if self.email is None and not self.identifier:
+            raise ValueError("Email is required")
+        return self
 
 
 def _normalize_phone(value: str) -> str:
@@ -164,6 +173,10 @@ class AccountSetupRead(BaseModel):
     avatar_url: str | None
     application_name: str
     client_id: str
+    # Lets the binding page link back to the originating application's login
+    # page even when the URL it was opened with carries only a token.
+    redirect_uri: str
+    state: str | None
 
 
 def _validate_username_format(value: str | None) -> str | None:
@@ -188,7 +201,7 @@ class AccountSetupRequest(BaseModel):
     """Create a local account or link a provider to an existing account."""
 
     token: str = Field(min_length=32, max_length=256)
-    mode: str = Field(pattern="^(new|link|skip)$")
+    mode: str = Field(pattern="^(new|link)$")
     username: str | None = Field(default=None, min_length=3, max_length=64)
     password: str | None = Field(default=None, min_length=8, max_length=128)
     email: EmailStr | None = None

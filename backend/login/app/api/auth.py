@@ -82,6 +82,8 @@ def account_setup_context(
         avatar_url=pending.get("avatar_url"),
         application_name=application.name,
         client_id=application.client_id,
+        redirect_uri=pending["redirect_uri"],
+        state=pending.get("state"),
     )
 
 
@@ -167,15 +169,17 @@ def email_password_login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> EmailLoginResponse:
-    """Complete username/email + password login and return an authorization code."""
-    # Normalize before keying the lockout so identifier variants cannot
+    """Log in an existing email account or register a new one."""
+    # Normalize before keying the lockout so email variants cannot
     # shard the failure counter.
-    normalized_identifier = payload.identifier.strip().lower()
+    login_identifier = str(payload.email) if payload.email is not None else payload.identifier
+    assert login_identifier is not None
+    normalized_email = login_identifier.strip().lower()
     redis_client = _check_rate_limit(
         request,
         check_login_lockout,
-        log_label="password_login",
-        email=normalized_identifier,
+        log_label="email_password_login",
+        email=normalized_email,
     )
 
     try:
@@ -183,23 +187,25 @@ def email_password_login(
             db,
             response,
             client_id=payload.client_id,
-            identifier=payload.identifier,
+            identifier=normalized_email,
             password=payload.password,
             redirect_uri=str(payload.redirect_uri),
             state=payload.state,
+            allow_registration=payload.email is not None,
+            remember=payload.remember_me,
         )
     except HTTPException as exc:
         if exc.status_code in (400, 401) and redis_client:
             record_failed_login(
-                redis_client, normalized_identifier, get_client_ip(request)
+                redis_client, normalized_email, get_client_ip(request)
             )
-        logger.warning("password_login_failed", identifier=normalized_identifier, detail=exc.detail)
+        logger.warning("email_password_login_failed", email=normalized_email, detail=exc.detail)
         raise
 
     if redis_client:
-        clear_failed_login(redis_client, normalized_identifier, get_client_ip(request))
+        clear_failed_login(redis_client, normalized_email, get_client_ip(request))
 
-    logger.info("password_login_success", identifier=payload.identifier)
+    logger.info("email_password_login_success", email=normalized_email)
     return EmailLoginResponse(
         code=auth_code.code,
         redirect_uri=f"{payload.redirect_uri}?{urlencode({'code': auth_code.code, **({'state': payload.state} if payload.state else {})})}",

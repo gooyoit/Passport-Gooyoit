@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, ShieldCheck, Zap, Users, Globe, Lock } from "lucide-react";
 
 const slideConfigs = [
-  { icon: ShieldCheck, titleKey: "slide1Title", descKey: "slide1Desc", color: "#3B82F6" },
-  { icon: Zap, titleKey: "slide2Title", descKey: "slide2Desc", color: "#F59E0B" },
-  { icon: Users, titleKey: "slide3Title", descKey: "slide3Desc", color: "#10B981" },
-  { icon: Globe, titleKey: "slide4Title", descKey: "slide4Desc", color: "#8B5CF6" },
-  { icon: Lock, titleKey: "slide5Title", descKey: "slide5Desc", color: "#EF4444" },
+  { icon: ShieldCheck, titleKey: "slide1Title", descKey: "slide1Desc" },
+  { icon: Zap, titleKey: "slide2Title", descKey: "slide2Desc" },
+  { icon: Users, titleKey: "slide3Title", descKey: "slide3Desc" },
+  { icon: Globe, titleKey: "slide4Title", descKey: "slide4Desc" },
+  { icon: Lock, titleKey: "slide5Title", descKey: "slide5Desc" },
 ];
 
 export default function Showcase() {
@@ -20,20 +20,18 @@ export default function Showcase() {
     return () => clearInterval(timer);
   }, [next]);
 
-  const slide = slideConfigs[idx];
-
   return (
     <section className="showcase-side" aria-label={t("showcase.slide1Title")}>
       <div className="showcase">
-        <div className="carousel" style={{ "--c": slide.color } as React.CSSProperties}>
+        <div className="carousel">
           <div className="carousel-slides">
             {slideConfigs.map((s, i) => (
               <div
                 key={i}
                 className={`carousel-slide ${i === idx ? "active" : ""}`}
               >
-                <div className="slide-icon-wrap" style={{ background: `${s.color}12`, color: s.color }}>
-                  <s.icon size={48} />
+                <div className="slide-icon-wrap">
+                  <s.icon size={22} />
                 </div>
                 <h2>{t(`showcase.${s.titleKey}`)}</h2>
                 <p>{t(`showcase.${s.descKey}`)}</p>

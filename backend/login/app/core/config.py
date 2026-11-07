@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     rate_limit_lockout_seconds: int = 900
     sso_session_ttl_seconds: int = 604_800
     sso_cookie_domain: str = ""
+    # Deployment-wide WeChat OAuth credentials. When set, every application gets
+    # WeChat login without per-application configuration; empty falls back to the
+    # legacy per-application ApplicationLoginMethod config.
+    wechat_app_id: str = ""
+    wechat_app_secret: str = ""
     account_setup_ttl_seconds: int = 600
     log_file: str = "logs/login.log"
     webauthn_rp_id: str = "localhost"

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
 type LegalKind = "tos" | "privacy";
-type Section = { h: string; p: string };
+type Section = { h: string; p: string | string[] };
 
 export default function LegalModal({
   kind,
@@ -59,7 +59,9 @@ export default function LegalModal({
             sections.map((s, i) => (
               <section key={i}>
                 <h3>{s.h}</h3>
-                <p>{s.p}</p>
+                {(Array.isArray(s.p) ? s.p : [s.p]).map((para, j) => (
+                  <p key={j}>{para}</p>
+                ))}
               </section>
             ))}
         </div>

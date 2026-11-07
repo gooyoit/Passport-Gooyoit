@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 const LENGTH = 6;
 
@@ -11,6 +12,7 @@ export default function OtpInput({
   onChange: (value: string) => void;
   autoFocus?: boolean;
 }) {
+  const { t } = useTranslation();
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   const digits = Array.from({ length: LENGTH }, (_, i) => value[i] ?? "");
@@ -66,7 +68,7 @@ export default function OtpInput({
   }
 
   return (
-    <div className="otp-row" role="group" aria-label="Verification code">
+    <div className="otp-row" role="group" aria-label={t("login.code")}>
       {digits.map((digit, i) => (
         <input
           key={i}
@@ -75,15 +77,17 @@ export default function OtpInput({
           }}
           className="otp-cell"
           type="text"
+          name="otp-code"
           inputMode="numeric"
           autoComplete={i === 0 ? "one-time-code" : "off"}
+          spellCheck={false}
           value={digit}
           autoFocus={autoFocus && i === 0}
           onChange={(e) => handleInput(i, e)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={handlePaste}
           onFocus={(e) => e.currentTarget.select()}
-          aria-label={`Digit ${i + 1}`}
+          aria-label={t("login.codeDigit", { index: i + 1 })}
         />
       ))}
     </div>

@@ -128,6 +128,112 @@ def test_password_login_accepts_phone_identifier(
     assert login.status_code == 200
 
 
+def test_email_password_login_auto_registers_unverified_email(
+    client: TestClient, db_session: Session
+) -> None:
+    """A new email creates an account on an open application and signs it in."""
+    application = create_test_application(
+        db_session, login_methods=["email_password"]
+    )
+
+    login = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "email": "new.user@example.com",
+            "password": "StrongPass1!",
+        },
+    )
+
+    assert login.status_code == 200, login.text
+    db_session.expire_all()
+    user = db_session.scalar(
+        __import__("sqlalchemy").select(models.User).where(
+            models.User.email == "new.user@example.com"
+        )
+    )
+    assert user is not None
+    assert user.email_verified_at is None
+    assert (
+        db_session.query(models.UserIdentity)
+        .filter_by(
+            user_id=user.id,
+            provider="email",
+            provider_user_id="new.user@example.com",
+        )
+        .count()
+        == 1
+    )
+
+    repeated = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "email": "NEW.USER@example.com",
+            "password": "StrongPass1!",
+        },
+    )
+    assert repeated.status_code == 200
+
+
+def test_email_password_auto_registration_respects_application_policy(
+    client: TestClient, db_session: Session
+) -> None:
+    """Private applications cannot create accounts through the combined form."""
+    application = create_test_application(
+        db_session,
+        enable_public_users=False,
+        login_methods=["email_password"],
+    )
+
+    login = client.post(
+        "/auth/email/login-password",
+        json={
+            "client_id": application["client_id"],
+            "redirect_uri": "https://crm.example.com/callback",
+            "email": "blocked@example.com",
+            "password": "StrongPass1!",
+        },
+    )
+
+    assert login.status_code == 403
+    assert db_session.scalar(
+        __import__("sqlalchemy").select(models.User).where(
+            models.User.email == "blocked@example.com"
+        )
+    ) is None
+
+
+def test_email_login_remember_me_controls_cookie_lifetime(
+    client: TestClient, db_session: Session
+) -> None:
+    """Remembered logins outlive the browser; unremembered ones are session cookies."""
+    application = create_test_application(db_session, login_methods=["email_password"])
+    payload = {
+        "client_id": application["client_id"],
+        "redirect_uri": "https://crm.example.com/callback",
+        "email": "remember.user@example.com",
+        "password": "StrongPass1!",
+    }
+
+    remembered = client.post(
+        "/auth/email/login-password", json={**payload, "remember_me": True}
+    )
+    assert remembered.status_code == 200, remembered.text
+    assert "Max-Age=" in remembered.headers["set-cookie"]
+
+    session_only = client.post(
+        "/auth/email/login-password", json={**payload, "remember_me": False}
+    )
+    assert session_only.status_code == 200, session_only.text
+    cookie = session_only.headers["set-cookie"]
+    assert "passport_sso=" in cookie
+    assert "Max-Age" not in cookie
+    assert "Expires" not in cookie
+
+
 def test_sms_rate_limit_blocks_burst(
     client: TestClient, db_session: Session, sms_sender, monkeypatch
 ) -> None:

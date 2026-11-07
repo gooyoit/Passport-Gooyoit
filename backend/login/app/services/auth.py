@@ -45,12 +45,16 @@ logger = structlog.get_logger(__name__)
 SSO_COOKIE_NAME = "passport_sso"
 
 
-def set_sso_cookie(response: Response, token: str) -> None:
-    """Write the SSO cookie, shared across subdomains when configured."""
+def set_sso_cookie(response: Response, token: str, *, remember: bool = True) -> None:
+    """Write the SSO cookie, shared across subdomains when configured.
+
+    Without ``remember`` the cookie has no ``Max-Age``/``Expires``, so the
+    browser drops it when the session ends.
+    """
     response.set_cookie(
         SSO_COOKIE_NAME,
         token,
-        max_age=settings.sso_session_ttl_seconds,
+        max_age=settings.sso_session_ttl_seconds if remember else None,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
@@ -63,11 +67,16 @@ def clear_sso_cookie(response: Response) -> None:
 
 
 def _set_sso_cookie_if_enabled(
-    db: Session, response: Response, application: Application, user_id: int
+    db: Session,
+    response: Response,
+    application: Application,
+    user_id: int,
+    *,
+    remember: bool = True,
 ) -> None:
     if application.enable_sso:
         sso_token = create_sso_session(db, user_id=user_id)
-        set_sso_cookie(response, sso_token)
+        set_sso_cookie(response, sso_token, remember=remember)
 
 
 def verify_client_secret(db: Session, application: Application, client_secret: str) -> bool:
@@ -337,8 +346,10 @@ def complete_password_login(
     password: str,
     redirect_uri: str,
     state: str | None,
+    allow_registration: bool = False,
+    remember: bool = True,
 ) -> OAuthAuthorizationCode:
-    """Verify username/email + password and create an authorization code."""
+    """Verify an email/password account or auto-register it when allowed."""
     application = get_active_application_by_client_id(db, client_id)
     if application is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
@@ -360,17 +371,72 @@ def complete_password_login(
             )
         )
     )
-    if user is None or not user.hashed_password:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
-    if not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password")
+    if user is None:
+        if not allow_registration:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        if not application.enable_public_users:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email is not registered",
+            )
+        categories = sum(
+            bool(check)
+            for check in (
+                any(c.isupper() for c in password),
+                any(c.islower() for c in password),
+                any(c.isdigit() for c in password),
+                any(not c.isalnum() for c in password),
+            )
+        )
+        if len(password) < 8 or categories < 3:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Password must be at least 8 characters and contain at least "
+                    "3 of: uppercase, lowercase, digit, special character"
+                ),
+            )
+        user = User(
+            email=normalized_identifier,
+            email_verified_at=None,
+            display_name=normalized_identifier.split("@")[0],
+            hashed_password=hash_password(password),
+            status=UserStatus.ACTIVE,
+        )
+        db.add(user)
+        db.flush()
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider="email",
+                provider_user_id=normalized_identifier,
+                provider_email=normalized_identifier,
+                raw_profile={"verified": False},
+            )
+        )
+        logger.info(
+            "email_password_registration_success",
+            email=normalized_identifier,
+            user_id=user.id,
+        )
+    else:
+        if not user.hashed_password or not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        if user.status != UserStatus.ACTIVE:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
 
-    logger.info("password_login_success", identifier=normalized_identifier, user_id=user.id)
+    logger.info("email_password_login_success", identifier=normalized_identifier, user_id=user.id)
     now = utcnow()
     membership = ensure_application_user(db, application=application, user=user)
     membership.last_login_at = now
 
-    _set_sso_cookie_if_enabled(db, response, application, user.id)
+    _set_sso_cookie_if_enabled(db, response, application, user.id, remember=remember)
 
     auth_code = create_authorization_code(
         db,

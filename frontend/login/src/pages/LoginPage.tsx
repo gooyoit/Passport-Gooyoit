@@ -10,9 +10,9 @@ import { useOAuthParams, providerUrl, api, safeRedirect, redirectUriSchema, logi
 import { useAliyunCaptcha } from "../lib/aliyunCaptcha";
 
 type FormEvent = React.FormEvent;
-type SmsPurpose = "login" | "register" | "reset_password";
-type View = "login" | "register" | "forgot";
-type Tab = "sms" | "password";
+type SmsPurpose = "login" | "reset_password";
+type View = "login" | "forgot";
+type Tab = "sms" | "email";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -23,9 +23,10 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showNewPwd, setShowNewPwd] = useState(false);
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [msg, setMsg] = useState("");
@@ -34,7 +35,7 @@ export default function LoginPage() {
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState("");
   const [loginMethods, setLoginMethods] = useState<string[]>([]);
-  const [allowRegistration, setAllowRegistration] = useState(false);
+  const [wechatEmbedUrl, setWechatEmbedUrl] = useState("");
   const [passwordEnabled, setPasswordEnabled] = useState(true);
   const [appName, setAppName] = useState(oauth.appName);
   const [legal, setLegal] = useState<null | "tos" | "privacy">(null);
@@ -84,7 +85,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     document.title = t(
-      view === "register" ? "login.registerTitle" : view === "forgot" ? "login.forgotTitle" : "login.title",
+      view === "forgot" ? "login.forgotTitle" : "login.title",
       { appName },
     );
   }, [t, appName, view]);
@@ -99,22 +100,30 @@ export default function LoginPage() {
       if (parsed.success && parsed.data.application_name) {
         setAppName(parsed.data.application_name);
       }
-      if (parsed.success && parsed.data.allow_registration) {
-        setAllowRegistration(true);
-      }
       if (methods.length > 0) {
         setLoginMethods(methods);
         setPasswordEnabled(methods.includes("email_password"));
         const tabs: Tab[] = [
           methods.includes("sms_code") ? "sms" : null,
-          methods.includes("email_password") ? "password" : null,
+          methods.includes("email_password") ? "email" : null,
         ].filter(Boolean) as Tab[];
         if (tabs.length > 0 && !tabs.includes("sms")) setMode(tabs[0]);
+        if (methods.includes("wechat")) {
+          api<{ authorization_url?: string }>(
+            `/oauth/providers/wechat/embed-url?client_id=${encodeURIComponent(oauth.clientId)}`
+            + `&redirect_uri=${encodeURIComponent(oauth.redirectUri)}`
+            + `&state=${encodeURIComponent(oauth.state)}`,
+          ).then((provider) => {
+            setWechatEmbedUrl(provider.authorization_url ?? "");
+          }).catch(() => {
+            setWechatEmbedUrl("");
+          });
+        }
       }
     }).catch(() => {
       setLoginMethods(["sms_code"]);
     });
-  }, []);
+  }, [oauth.clientId, oauth.redirectUri, oauth.state]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -177,27 +186,15 @@ export default function LoginPage() {
           body: JSON.stringify({
             client_id: oauth.clientId,
             redirect_uri: oauth.redirectUri,
-            identifier,
+            email,
             password,
             state: oauth.state,
+            remember_me: rememberMe,
           }),
         });
         const parsedPwd = redirectUriSchema.safeParse(r);
         if (parsedPwd.success) safeRedirect(parsedPwd.data.redirect_uri);
       }
-    } catch (err) {
-      setMsg((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function register(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMsg("");
-    try {
-      await finishSmsFlow("/auth/sms/register", {});
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -287,12 +284,6 @@ export default function LoginPage() {
 
   const secondaryProviders = (
     <>
-      {loginMethods.includes("wechat") && (
-        <a className="social-btn" href={providerUrl("wechat", oauth)} rel="noopener noreferrer">
-          <FaWeixin size={18} color="#07C160" />
-          <span>{t("login.wechat")}</span>
-        </a>
-      )}
       {loginMethods.includes("google") && (
         <a className="social-btn" href={providerUrl("google", oauth)} rel="noopener noreferrer">
           <GoogleIcon size={18} />
@@ -319,22 +310,39 @@ export default function LoginPage() {
     </>
   );
 
+  const legalTerms = (
+    <p className="terms">
+      {t("login.termsPre", { appName })}
+      <button type="button" onClick={() => setLegal("tos")}>
+        {t("login.tos")}
+      </button>
+      {t("login.termsJoin")}
+      <button type="button" onClick={() => setLegal("privacy")}>
+        {t("login.privacy")}
+      </button>
+      {t("login.termsSuffix")}
+    </p>
+  );
+
   const phoneField = (
     <label className="field">
       <span>{t("login.phone")}</span>
-      <input
-        type="tel"
-        value={phone}
-        onChange={(e) => {
-          setPhone(e.target.value);
-          if (phoneError) setPhoneError("");
-        }}
-        placeholder={t("login.phonePlaceholder")}
-        autoComplete="tel"
-        inputMode="tel"
-        maxLength={20}
-        required
-      />
+      <div className="phone-input">
+        <span className="phone-prefix" aria-hidden="true">+86</span>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => {
+            setPhone(e.target.value);
+            if (phoneError) setPhoneError("");
+          }}
+          placeholder={t("login.phonePlaceholder")}
+          autoComplete="tel"
+          inputMode="tel"
+          maxLength={20}
+          required
+        />
+      </div>
       {phoneError && <span className="field-msg">{phoneError}</span>}
     </label>
   );
@@ -344,7 +352,7 @@ export default function LoginPage() {
       <span>{t("login.code")}</span>
       <OtpInput value={code} onChange={setCode} />
       <div className="otp-meta">
-        <span className="otp-hint">{codeSent ? t("login.noCode") : ""}</span>
+        <span className="otp-hint" aria-live="polite">{codeSent ? t("login.noCode") : ""}</span>
         <button
           type="button"
           className="text-btn send-code-link"
@@ -354,32 +362,51 @@ export default function LoginPage() {
           {cooldown > 0 ? t("login.resendIn", { seconds: cooldown }) : codeSent ? t("login.resend") : t("login.sendCode")}
         </button>
       </div>
-      {codeMsg && <span className="field-msg">{codeMsg}</span>}
+      {codeMsg && <span className="field-msg" id="sms-code-msg">{codeMsg}</span>}
       {import.meta.env.DEV && debugCode && codeSent && (
         <p className="field-msg">DEV: {debugCode}</p>
       )}
     </label>
   );
 
+  const wechatAvailable = loginMethods.includes("wechat");
+  const hasSecondaryProviders = loginMethods.some((method) =>
+    ["google", "github", "passkey"].includes(method),
+  );
+
   return (
     <main className="shell">
+      <header className="page-header">
+        <div className="brand-mark">
+          <ShieldCheck size={18} />
+        </div>
+        <strong>Gooyoit Passport</strong>
+      </header>
+
       <Showcase />
       <section className="auth-side">
-        <div className="auth-card">
-          <div className="auth-header">
-            <div className="brand-mark">
-              <ShieldCheck size={28} />
-            </div>
-            <h1>
-              {view === "register"
-                ? t("login.registerTitle", { appName })
-                : view === "forgot"
-                  ? t("login.forgotTitle")
-                  : t("login.title", { appName })}
-            </h1>
-          </div>
-          {view === "register" && <p className="auth-subtitle">{t("login.registerDesc")}</p>}
-          {view === "forgot" && <p className="auth-subtitle">{t("login.forgotDesc")}</p>}
+        <div className="login-shell">
+          {view === "login" && (
+            <header className="login-heading">
+              <h1>{t("login.title", { appName })}</h1>
+            </header>
+          )}
+          <div
+            className={
+              view === "login"
+                ? `auth-card login-card${wechatAvailable ? "" : " no-wechat"}`
+                : "auth-card"
+            }
+          >
+            {view !== "login" && (
+              <div className="auth-header">
+                <div className="brand-mark">
+                  <ShieldCheck size={28} />
+                </div>
+                <h1>{t("login.forgotTitle")}</h1>
+              </div>
+            )}
+            {view === "forgot" && <p className="auth-subtitle">{t("login.forgotDesc")}</p>}
 
           {view !== "login" && (
             <button type="button" className="back-link" onClick={() => switchView("login")}>
@@ -389,73 +416,113 @@ export default function LoginPage() {
 
           {view === "login" && (
             <>
-              {tabsAvailable && (
-                <div className="setup-tabs login-tabs" role="tablist">
-                  {smsAvailable && (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={mode === "sms"}
-                      className={mode === "sms" ? "active" : ""}
-                      onClick={() => { setMode("sms"); setMsg(""); }}
-                    >
-                      {t("login.tabSms")}
-                    </button>
-                  )}
-                  {passwordEnabled && (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={mode === "password"}
-                      className={mode === "password" ? "active" : ""}
-                      onClick={() => { setMode("password"); setMsg(""); }}
-                    >
-                      {t("login.tabPassword")}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <form className="email-form" onSubmit={login}>
-                  {mode === "sms" ? (
-                    <>
-                      {phoneField}
-                      {smsCodeField("login")}
-                    </>
-                  ) : (
-                    <>
-                      <label className="field">
-                        <span>{t("login.identifier")}</span>
-                        <input
-                          type="text"
-                          value={identifier}
-                          onChange={(e) => setIdentifier(e.target.value)}
-                          placeholder={t("login.identifierPlaceholder")}
-                          autoComplete="username"
-                          required
+              <div className={`login-auth-grid ${wechatAvailable ? "has-wechat" : "form-only"}`}>
+                {wechatAvailable && (
+                  <section className="wechat-login-panel" aria-label={t("login.wechatTitle")}>
+                    <h2>{t("login.wechatTitle")}</h2>
+                    <div className="wechat-frame-wrap">
+                      {wechatEmbedUrl ? (
+                        <iframe
+                          className="wechat-frame"
+                          src={wechatEmbedUrl}
+                          title={t("login.wechatTitle")}
+                          referrerPolicy="strict-origin-when-cross-origin"
                         />
-                      </label>
-                      <label className="field">
-                        <span>{t("login.password")}</span>
-                        <div className="pwd-wrap">
+                      ) : (
+                        <div className="wechat-frame-placeholder">
+                          {t("login.wechatLoading")}
+                        </div>
+                      )}
+                    </div>
+                    <p>{t("login.wechatQrHint")}</p>
+                    <a
+                      className="social-btn wechat-mobile-btn"
+                      href={providerUrl("wechat", oauth)}
+                      rel="noopener noreferrer"
+                    >
+                      <FaWeixin size={18} color="#07C160" />
+                      <span>{t("login.wechat")}</span>
+                    </a>
+                  </section>
+                )}
+
+                <section className="login-form-panel">
+                  {tabsAvailable && (
+                    <div className="setup-tabs login-tabs" role="tablist">
+                      {smsAvailable && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={mode === "sms"}
+                          className={mode === "sms" ? "active" : ""}
+                          onClick={() => { setMode("sms"); setMsg(""); }}
+                        >
+                          {t("login.tabSms")}
+                        </button>
+                      )}
+                      {passwordEnabled && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={mode === "email"}
+                          className={mode === "email" ? "active" : ""}
+                          onClick={() => { setMode("email"); setMsg(""); }}
+                        >
+                          {t("login.tabEmail")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <form className="email-form" onSubmit={login}>
+                    {mode === "sms" ? (
+                      <>
+                        {phoneField}
+                        {smsCodeField("login")}
+                      </>
+                    ) : (
+                      <>
+                        <label className="field">
+                          <span>{t("login.email")}</span>
                           <input
-                            type={showPwd ? "text" : "password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder={t("login.pwdPlaceholder")}
-                            autoComplete="current-password"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder={t("login.emailPlaceholder")}
+                            autoComplete="email"
                             required
                           />
-                          <button
-                            type="button"
-                            className="pwd-toggle"
-                            onClick={() => setShowPwd(!showPwd)}
-                            aria-label="toggle password"
-                          >
-                            {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
-                        <div className="otp-meta">
+                        </label>
+                        <label className="field">
+                          <span>{t("login.password")}</span>
+                          <div className="pwd-wrap">
+                            <input
+                              type={showPwd ? "text" : "password"}
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              placeholder={t("login.pwdPlaceholder")}
+                              autoComplete="current-password"
+                              required
+                            />
+                            <button
+                              type="button"
+                              className="pwd-toggle"
+                              onClick={() => setShowPwd(!showPwd)}
+                              aria-label={t("login.togglePassword")}
+                            >
+                              {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </label>
+                        <div className="login-form-meta">
+                          <label className="remember">
+                            <input
+                              type="checkbox"
+                              checked={rememberMe}
+                              onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <span>{t("login.rememberMe")}</span>
+                          </label>
                           <button
                             type="button"
                             className="text-btn send-code-link"
@@ -464,47 +531,33 @@ export default function LoginPage() {
                             {t("login.forgotLink")}
                           </button>
                         </div>
-                      </label>
-                    </>
-                  )}
+                      </>
+                    )}
 
-                  <button
-                    type="submit"
-                    className="primary-btn"
-                    disabled={loading || (mode === "sms" && code.length < 4)}
-                  >
-                    {loading ? t("login.logging") : t("login.submit")}
-                  </button>
+                    {legalTerms}
 
-                  {(loginMethods.includes("wechat") || loginMethods.includes("google") || loginMethods.includes("github") || loginMethods.includes("passkey")) && (
-                    <div className="or-divider">
-                      <span />
-                      <small>OR</small>
-                      <span />
-                    </div>
-                  )}
-                  {secondaryProviders}
-                </form>
+                    <button
+                      type="submit"
+                      className="primary-btn"
+                      disabled={loading || (mode === "sms" && code.length < 4)}
+                    >
+                      {loading ? t("login.logging") : t("login.submit")}
+                    </button>
 
-              {allowRegistration && smsAvailable && (
-                <p className="switch-text">
-                  {t("login.noAccount")}{" "}
-                  <button type="button" onClick={() => switchView("register")}>
-                    {t("login.toRegister")}
-                  </button>
-                </p>
-              )}
+                    {hasSecondaryProviders && (
+                      <>
+                        <div className="or-divider">
+                          <span />
+                          <small>{t("login.or")}</small>
+                          <span />
+                        </div>
+                        <div className="provider-buttons">{secondaryProviders}</div>
+                      </>
+                    )}
+                  </form>
+                </section>
+              </div>
             </>
-          )}
-
-          {view === "register" && (
-            <form className="email-form" onSubmit={register}>
-              {phoneField}
-              {smsCodeField("register")}
-              <button type="submit" className="primary-btn" disabled={loading || code.length < 4}>
-                {loading ? t("login.logging") : t("login.registerSubmit")}
-              </button>
-            </form>
           )}
 
           {view === "forgot" && (
@@ -546,15 +599,6 @@ export default function LoginPage() {
               {import.meta.env.DEV && debugCode && view === "login" && mode === "sms" ? ` (${debugCode})` : ""}
             </p>
           )}
-
-          {view === "register" && (
-            <p className="switch-text">
-              {t("login.haveAccount")}{" "}
-              <button type="button" onClick={() => switchView("login")}>
-                {t("login.toLogin")}
-              </button>
-            </p>
-          )}
           {view === "forgot" && (
             <p className="switch-text">
               {t("login.remembered")}{" "}
@@ -564,24 +608,14 @@ export default function LoginPage() {
             </p>
           )}
 
-          {view === "login" && (
-            <p className="switch-text">
-              <a href="/account/settings">{t("login.accountSettings")}</a>
-            </p>
-          )}
-          <p className="terms">
-            {t("login.termsPre")}
-            <button type="button" onClick={() => setLegal("tos")}>
-              {t("login.tos")}
-            </button>
-            {t("login.termsJoin")}
-            <button type="button" onClick={() => setLegal("privacy")}>
-              {t("login.privacy")}
-            </button>
-            {t("login.termsSuffix")}
-          </p>
+          {view === "forgot" && legalTerms}
+          </div>
         </div>
       </section>
+
+      <footer className="page-footer">
+        © {new Date().getFullYear()} Gooyoit Passport
+      </footer>
 
       {legal && <LegalModal kind={legal} onClose={() => setLegal(null)} />}
 
