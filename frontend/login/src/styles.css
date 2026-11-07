@@ -70,10 +70,32 @@ button, input, a { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
   height: 64px;
   padding: 0 40px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.footer-sep {
+  color: var(--border-hover);
+}
+
+.footer-icp {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.footer-icp:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.footer-icp:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ── left: showcase ────────────────────────────────────── */

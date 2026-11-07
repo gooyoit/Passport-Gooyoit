@@ -614,7 +614,16 @@ export default function LoginPage() {
       </section>
 
       <footer className="page-footer">
-        © {new Date().getFullYear()} Gooyoit Passport
+        <span>© {new Date().getFullYear()} Gooyoit Passport</span>
+        <span className="footer-sep" aria-hidden="true">·</span>
+        <a
+          className="footer-icp"
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          粤ICP备2026165130号
+        </a>
       </footer>
 
       {legal && <LegalModal kind={legal} onClose={() => setLegal(null)} />}
