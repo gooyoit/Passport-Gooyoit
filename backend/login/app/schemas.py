@@ -161,6 +161,9 @@ class UserInfo(BaseModel):
     id: int
     username: str | None = None
     email: str | None
+    # Email addresses are attached without ownership proof in the current
+    # product flow; downstream apps must check this before trusting `email`.
+    email_verified: bool = False
     display_name: str | None
     status: str
 
