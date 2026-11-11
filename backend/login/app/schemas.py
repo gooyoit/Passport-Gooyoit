@@ -160,10 +160,11 @@ class UserInfo(BaseModel):
 
     id: int
     username: str | None = None
+    # NOTE: `email` is not proof of ownership. It is attached by the email
+    # sign-in, email binding and OAuth flows without an address round-trip.
+    # Do not publish an `email_verified` claim until a verification flow
+    # writes `User.email_verified_at` on a proof-backed path.
     email: str | None
-    # Email addresses are attached without ownership proof in the current
-    # product flow; downstream apps must check this before trusting `email`.
-    email_verified: bool = False
     display_name: str | None
     status: str
 
